@@ -146,9 +146,9 @@ export function Users() {
                 </th>
                 <th className="font-semibold text-gray-700 bg-white">User Name</th>
                 <th className="font-semibold text-gray-700 bg-white">Roll</th>
-                <th className="font-semibold text-gray-700 bg-white">Student ID</th>
+                <th className="font-semibold text-gray-700 bg-white">Address</th>
                 <th className="font-semibold text-gray-700 bg-white">Class</th>
-                <th className="font-semibold text-gray-700 bg-white">Email</th>
+                <th className="font-semibold text-gray-700 bg-white">Date of Birth</th>
                 <th className="font-semibold text-gray-700 bg-white">Phone</th>
                 <th className="text-center font-semibold text-gray-700 bg-white">Action</th>
               </tr>
@@ -166,14 +166,15 @@ export function Users() {
                     </label>
                   </td>
                   <td>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 py-1">
+                      <img src={`https://i.pravatar.cc/150?u=${student.id}`} alt={student.name} className="h-8 w-8 rounded-full object-cover" />
                       <span className="font-medium text-gray-900">{student.name}</span>
                     </div>
                   </td>
                   <td className="text-gray-500">{student.roll}</td>
-                  <td className="text-gray-500">{student.studentId}</td>
+                  <td className="text-gray-500">{student.address || '-'}</td>
                   <td className="text-gray-500">{student.className}</td>
-                  <td className="text-gray-500">{student.primaryEmail || '-'}</td>
+                  <td className="text-gray-500">12/05/2001</td>
                   <td className="text-gray-500">{student.primaryPhone || '-'}</td>
                   <td>
                     <div className="flex items-center justify-center gap-4 text-[#8f829f]">

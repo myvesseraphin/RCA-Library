@@ -179,17 +179,9 @@ function buildPasswordResetEmailHtml(name: string, code: string) {
   const safeName = escapeHtml(name || 'there');
   const safeCode = escapeHtml(code);
   const safeMinutes = escapeHtml(String(config.resetCodeTtlMinutes));
-  const brandName = escapeHtml(config.smtpFromName || 'Library');
-  const brandImageUrl = getEmailBrandImageUrl();
   const supportEmail = escapeHtml(buildFromAddress().replace(/^.*<([^>]+)>.*$/, '$1') || config.smtpUser || config.resendFromEmail || '');
-  const avatarLabel = escapeHtml((name || brandName).trim().charAt(0).toUpperCase() || 'L');
 
-  const logoMarkup = brandImageUrl
-    ? `<img src="${escapeHtml(brandImageUrl)}" alt="${brandName}" width="78" height="78" style="display:block;width:78px;height:78px;border-radius:24px;object-fit:cover;border:0;" />`
-    : `<div style="width:78px;height:78px;border-radius:24px;background:linear-gradient(135deg,#f4ebff 0%,#ede9fe 100%);color:#5218a5;font-size:30px;font-weight:700;line-height:78px;text-align:center;">${avatarLabel}</div>`;
-
-  return `
-<!doctype html>
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -207,13 +199,8 @@ function buildPasswordResetEmailHtml(name: string, code: string) {
             <tr>
               <td align="center" style="padding-bottom:20px;">
                 <div style="font-size:40px;line-height:1;font-weight:700;letter-spacing:-0.03em;color:#111827;">
-                  ${brandName}
+                  RCA Library System
                 </div>
-              </td>
-            </tr>
-            <tr>
-              <td align="center" style="padding-bottom:26px;">
-                ${logoMarkup}
               </td>
             </tr>
             <tr>
@@ -245,7 +232,7 @@ function buildPasswordResetEmailHtml(name: string, code: string) {
             <tr>
               <td align="center" style="padding-top:8px;border-top:1px solid #f3f4f6;">
                 <div style="padding-top:28px;font-size:13px;line-height:22px;color:#9ca3af;">
-                  ${brandName} Library System
+                  RCA Library System
                 </div>
               </td>
             </tr>
@@ -254,8 +241,7 @@ function buildPasswordResetEmailHtml(name: string, code: string) {
       </tr>
     </table>
   </body>
-</html>
-  `.trim();
+</html>`;
 }
 
 function buildFromAddress() {
@@ -290,21 +276,21 @@ async function deliverPasswordResetCode(email: string, name: string, code: strin
     const transporter = nodemailer.createTransport(
       config.smtpService
         ? {
-            service: config.smtpService,
-            auth: {
-              user: config.smtpUser,
-              pass: config.smtpPass,
-            },
-          }
-        : {
-            host: config.smtpHost,
-            port: config.smtpPort,
-            secure: config.smtpSecure,
-            auth: {
-              user: config.smtpUser,
-              pass: config.smtpPass,
-            },
+          service: config.smtpService,
+          auth: {
+            user: config.smtpUser,
+            pass: config.smtpPass,
           },
+        }
+        : {
+          host: config.smtpHost,
+          port: config.smtpPort,
+          secure: config.smtpSecure,
+          auth: {
+            user: config.smtpUser,
+            pass: config.smtpPass,
+          },
+        },
     );
 
     await transporter.sendMail({
