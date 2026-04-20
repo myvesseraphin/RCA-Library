@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Edit3, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Edit3, Plus, Search, Trash2, ChevronDown, MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BookCoverArtwork } from '../components/ui/BookCoverArtwork';
 import { PageLoader } from '../components/ui/PageLoader';
@@ -115,21 +115,31 @@ export function Library() {
             <h2 className="text-[1.1rem] font-bold text-gray-900">All Books</h2>
             <p className="mt-1 text-sm text-gray-500">{filteredBooks.length} book{filteredBooks.length === 1 ? '' : 's'} in the catalog</p>
           </div>
-          <label className="showcase-input min-w-[280px] px-3">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search by title, author, subject..."
-            />
-            <Search className="showcase-input-icon h-4 w-4" />
-          </label>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-64">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search by title, author, subject..."
+                className="w-full bg-gray-50/80 border border-gray-100 rounded-lg py-2 px-4 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all placeholder:text-gray-400"
+              />
+              <span className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-brand-primary">
+                <Search className="w-4 h-4 opacity-70" />
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto custom-scrollbar">
           <table className="showcase-table min-w-[860px]">
             <thead>
               <tr>
+                <th className="w-12 px-5">
+                   <label className="flex items-center cursor-pointer">
+                     <div className="h-4 w-4 rounded-[4px] border border-gray-200 bg-white"></div>
+                   </label>
+                </th>
                 <th>Book Name</th>
                 <th>Writer</th>
                 <th>Id</th>
@@ -144,8 +154,13 @@ export function Library() {
                 <tr
                   key={book.id}
                   onClick={() => navigate(`/library/${book.id}/details`)}
-                  className="cursor-pointer"
+                  className="cursor-pointer transition hover:bg-[#fcfaff]"
                 >
+                  <td className="w-12 px-5">
+                    <label className="flex items-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                         <div className="h-4 w-4 rounded-[4px] border border-gray-200 bg-transparent"></div>
+                    </label>
+                  </td>
                   <td>
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-gray-100 bg-gray-50 shadow-sm">
@@ -160,35 +175,35 @@ export function Library() {
                   <td className="font-medium text-gray-700">{book.className}</td>
                   <td>{book.publishDate || '-'}</td>
                   <td>
-                    <div className="flex items-center justify-center gap-2 text-gray-400">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          navigate(`/library/${book.id}/edit`);
-                        }}
-                        className="rounded-md p-1.5 transition hover:bg-brand-secondary hover:text-brand-primary"
-                        aria-label={`Edit ${book.title}`}
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
+                    <div className="flex items-center justify-center gap-4 text-[#8f829f]">
                       <button
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
                           setRecordToDelete(book);
                         }}
-                        className="rounded-md p-1.5 transition hover:bg-red-50 hover:text-red-500"
+                        className="hover:text-red-600 transition"
                         aria-label={`Delete ${book.title}`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-[15px] w-[15px]" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/library/${book.id}/edit`);
+                        }}
+                        className="hover:text-[#5218a5] transition"
+                        aria-label={`Edit ${book.title}`}
+                      >
+                        <Edit3 className="h-[15px] w-[15px]" />
                       </button>
                     </div>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-14 text-center text-sm text-gray-500">
+                  <td colSpan={8} className="px-6 py-14 text-center text-sm text-gray-500">
                     No books match your current search.
                   </td>
                 </tr>
@@ -197,25 +212,24 @@ export function Library() {
           </table>
         </div>
 
-        <div className="mt-5 flex flex-col items-center justify-between gap-4 border-t border-[#f3edf8] pt-4 text-sm text-[#6f647d] sm:flex-row">
-          <div className="showcase-pagination">
+        <div className="p-6 border-t border-gray-100 flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-1 mx-auto text-sm">
             <button
               type="button"
               onClick={() => setPage((current) => Math.max(1, current - 1))}
               disabled={page === 1}
-              className="showcase-page-button"
-              aria-label="Previous page"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50"
             >
-              <ChevronLeft className="mx-auto h-4 w-4" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
             {getVisiblePages(page, totalPages).map((item, index) => item === 'ellipsis' ? (
-              <span key={`ellipsis-${index}`} className="px-1 text-base">…</span>
+              <span key={`ellipsis-${index}`} className="w-8 h-8 flex items-center justify-center text-gray-400"><MoreHorizontal className="w-4 h-4" /></span>
             ) : (
               <button
                 key={item}
                 type="button"
-                onClick={() => setPage(item)}
-                className={`showcase-page-button ${item === page ? 'is-active' : ''}`}
+                onClick={() => setPage(item as number)}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg font-medium transition-colors ${item === page ? 'text-white bg-brand-primary' : 'text-gray-600 hover:bg-gray-50'}`}
               >
                 {item}
               </button>
@@ -224,18 +238,16 @@ export function Library() {
               type="button"
               onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
               disabled={page === totalPages}
-              className="showcase-page-button"
-              aria-label="Next page"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50"
             >
-              <ChevronRight className="mx-auto h-4 w-4" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-
-          <div className="flex items-center gap-3 text-sm">
-            <span>{filteredBooks.length} records</span>
-            <div className="showcase-input h-auto min-h-0 w-auto gap-2 px-3 py-1.5">
-              <span className="showcase-input-value text-sm">{PAGE_SIZE} / page</span>
-            </div>
+          <div className="flex items-center gap-2 mx-auto sm:mx-0">
+             <button className="flex items-center gap-2 border border-gray-100 text-gray-600 bg-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+              {PAGE_SIZE} / page
+              <ChevronDown className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>

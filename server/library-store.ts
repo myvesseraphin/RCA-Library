@@ -344,11 +344,6 @@ export async function initializeLibraryStore() {
       full_name TEXT NOT NULL,
       first_name TEXT NOT NULL,
       last_name TEXT NOT NULL,
-      father_name TEXT NOT NULL DEFAULT '',
-      mother_name TEXT NOT NULL DEFAULT '',
-      father_occupation TEXT NOT NULL DEFAULT '',
-      mother_occupation TEXT NOT NULL DEFAULT '',
-      religion TEXT NOT NULL DEFAULT '',
       class_level TEXT NOT NULL,
       stream_name TEXT NOT NULL,
       class_name TEXT NOT NULL,
@@ -356,16 +351,10 @@ export async function initializeLibraryStore() {
       student_id TEXT NOT NULL UNIQUE,
       admission_date DATE,
       primary_phone TEXT NOT NULL DEFAULT '',
-      secondary_phone TEXT NOT NULL DEFAULT '',
       primary_email TEXT NOT NULL DEFAULT '',
-      secondary_email TEXT NOT NULL DEFAULT '',
       address TEXT NOT NULL DEFAULT '',
-      street_address TEXT NOT NULL DEFAULT '',
-      house_name TEXT NOT NULL DEFAULT '',
-      house_number TEXT NOT NULL DEFAULT '',
       borrow_score INTEGER NOT NULL DEFAULT 0,
       lifetime_borrowed INTEGER NOT NULL DEFAULT 0,
-      overdue_events INTEGER NOT NULL DEFAULT 0,
       total_fines_paid_rwf INTEGER NOT NULL DEFAULT 0,
       total_fines_owed_rwf INTEGER NOT NULL DEFAULT 0,
       is_selected BOOLEAN NOT NULL DEFAULT FALSE,
@@ -614,13 +603,12 @@ export async function createUser(payload: Record<string, unknown>) {
           address,
           borrow_score,
           lifetime_borrowed,
-          overdue_events,
           total_fines_paid_rwf,
           total_fines_owed_rwf,
           is_selected
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-          $11, $12, 0, 0, 0, 0, 0, FALSE
+          $11, $12, 0, 0, 0, 0, FALSE
         )
         RETURNING *
       `,

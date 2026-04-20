@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { InitialAvatar } from '../components/ui/InitialAvatar';
 import { PageLoader } from '../components/ui/PageLoader';
 import { api, type DashboardData } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { useNotifications } from '../lib/notifications';
 import { useToast } from '../lib/toast';
 
@@ -13,6 +14,7 @@ const statIcons = [Users, UserRound, BookOpen, Bell];
 export function Dashboard() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
   const { notifications } = useNotifications();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,7 +58,7 @@ export function Dashboard() {
   return (
     <div className="page-shell space-y-5">
       <div>
-        <h1 className="text-[1.45rem] font-bold leading-tight text-gray-900">Welcome to Library Management System</h1>
+        <h1 className="text-[1.45rem] font-bold leading-tight text-gray-900">Welcome {user?.name ? user.name.split(' ')[0] : 'User'}</h1>
       </div>
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -64,12 +66,12 @@ export function Dashboard() {
           const Icon = statIcons[index] ?? Bell;
 
           return (
-            <div key={stat.label} className="showcase-metric-card p-5">
-              <div className="flex flex-col items-start gap-4">
-                <div className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#f8f3ff] text-[#8130d2]">
-                  <Icon className="h-5 w-5" />
+            <div key={stat.label} className="showcase-metric-card px-5 py-6">
+              <div className="flex flex-col items-start gap-[18px]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-[12px] bg-[#f8f3ff] text-[#8130d2]">
+                  <Icon className="h-6 w-6" />
                 </div>
-                <div className="min-w-0 w-full mt-1">
+                <div className="min-w-0 w-full mt-2">
                   <p className="text-[13px] font-medium text-gray-500 truncate">{stat.label}</p>
                   <div className="mt-1 flex items-center gap-3">
                     <span className="text-[1.85rem] font-bold leading-none text-gray-900">{stat.value}</span>
@@ -135,7 +137,13 @@ export function Dashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dashboardData.topBorrowedCategories} margin={{ top: 10, right: 0, left: -12, bottom: 0 }} barSize={22}>
                 <CartesianGrid stroke="#efe8f6" vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#756a84', fontSize: 11 }} dy={10} interval={0} />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#756a84', fontSize: 10 }} 
+                  dy={10}
+                />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#756a84', fontSize: 11 }} />
                 <Tooltip
                   cursor={{ fill: 'rgba(124, 47, 208, 0.04)' }}
@@ -152,19 +160,19 @@ export function Dashboard() {
         <section className="showcase-card px-2 py-4">
           <div className="mb-4 px-4 flex items-center justify-between">
             <div>
-              <h2 className="text-[1.05rem] font-bold text-gray-900">Recent Borrowers</h2>
+              <h2 className="text-[17px] font-bold text-[#1f152e]">Recent Borrowers</h2>
             </div>
-            <button type="button" className="text-gray-400 hover:text-gray-600">
+            <button type="button" className="text-gray-400 hover:text-[#5218a5]">
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
             </button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-[13px]">
+          <div className="overflow-x-auto px-1">
+            <table className="w-full text-left text-[14px] border-collapse">
               <thead>
-                <tr className="text-[#8f829f]">
-                  <th className="px-5 py-3 font-medium">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input type="checkbox" className="rounded text-[#7c2fd0] focus:ring-[#7c2fd0]" disabled />
+                <tr className="text-[#8f829f] text-[13px]">
+                  <th className="px-5 py-3 font-medium whitespace-nowrap">
+                    <label className="flex items-center gap-4 cursor-pointer">
+                      <div className="h-4 w-4 rounded-[4px] border border-gray-200 bg-white"></div>
                       Name
                     </label>
                   </th>
@@ -173,25 +181,27 @@ export function Dashboard() {
                   <th className="px-5 py-3 font-medium">Year</th>
                 </tr>
               </thead>
-              <tbody>
-                {dashboardData.recentBorrowers.slice(0, 5).map((borrower, idx) => (
-                  <tr
-                    key={borrower.id}
-                    onClick={() => navigate(`/users/${borrower.id}/profile`)}
-                    className="cursor-pointer transition hover:bg-[#fdfaff]"
-                  >
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <input type="checkbox" className="rounded border-gray-300 text-[#7c2fd0] focus:ring-[#7c2fd0]" defaultChecked={idx === 1} onClick={(e) => e.stopPropagation()} />
-                        <InitialAvatar name={borrower.name} className="h-7 w-7 text-[10px]" />
-                        <span className="font-semibold text-gray-900">{borrower.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 text-gray-500">{borrower.studentId}</td>
-                    <td className="px-5 py-3.5 text-gray-500">{(Math.random() * 15 + 85).toFixed(0)}%</td>
-                    <td className="px-5 py-3.5 text-gray-500">2024</td>
-                  </tr>
-                ))}
+              <tbody className="divide-y divide-[#f7f4fb]">
+                {dashboardData.recentBorrowers.slice(0, 5).map((borrower) => {
+                  return (
+                    <tr
+                      key={borrower.id}
+                      onClick={() => navigate(`/users/${borrower.id}/profile`)}
+                      className="cursor-pointer transition hover:bg-[#fcfaff]"
+                    >
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-4">
+                             <div className="h-4 w-4 rounded-[4px] border border-gray-200 bg-transparent"></div>
+                          <InitialAvatar name={borrower.name} className="h-8 w-8 text-[11px]" />
+                          <span className="font-semibold text-[#1f152e] text-[14px]">{borrower.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-[#4d4458]">{borrower.studentId}</td>
+                      <td className="px-5 py-3 text-[#4d4458]">{(Math.random() * 15 + 85).toFixed(0)}%</td>
+                      <td className="px-5 py-3 text-[#4d4458]">2024</td>
+                    </tr>
+                  )
+                })}
                 {dashboardData.recentBorrowers.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-5 py-4 text-center text-gray-500">No borrowers found.</td>
@@ -202,20 +212,20 @@ export function Dashboard() {
           </div>
         </section>
 
-        <section className="showcase-card p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-[1.05rem] font-bold text-gray-900">Quick Actions</h2>
-            <span className="showcase-section-dot">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-            </span>
+        <section className="showcase-card px-6 py-6 pb-8">
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-[17px] font-bold text-[#1f152e]">Quick Actions</h2>
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#5218a5] text-white">
+               <svg className="h-[14px] w-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
           </div>
-          <div className="space-y-3 mt-6">
+          <div className="space-y-[14px]">
             {dashboardData.quickActions.slice(0, 3).map((action) => (
               <button
                 key={action.id}
                 type="button"
                 onClick={() => navigate(action.path)}
-                className="w-full rounded-xl border border-[#eee6f7] bg-white px-4 py-2.5 text-center text-[13px] font-medium text-[#7c2fd0] transition hover:bg-[#fdfaff] shadow-sm shadow-[#7c2fd0]/5"
+                className="w-full rounded-[14px] border border-[#e2d5f2] bg-white px-4 py-[13px] text-center text-[15px] font-bold text-[#451483] transition hover:bg-[#fdfaff] shadow-sm shadow-[#451483]/5"
               >
                 {action.label}
               </button>

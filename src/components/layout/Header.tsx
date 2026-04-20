@@ -20,16 +20,7 @@ export function Header() {
 
   return (
     <header className="h-20 bg-white sticky top-0 z-10 flex items-center justify-between px-8 border-b border-gray-100">
-      <div className="flex-1 max-w-xl relative">
-        <span className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-brand-primary">
-          <Search className="w-5 h-5 opacity-70" />
-        </span>
-        <input
-          type="text"
-          placeholder="What do you want to find?"
-          className="w-full bg-gray-50/80 border border-gray-100 rounded-full py-2.5 px-5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all placeholder:text-gray-400"
-        />
-      </div>
+      <div className="flex-1 max-w-xl"></div>
 
       <div className="flex items-center gap-6 ml-4">
         <button

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type SVGProps } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, CornerUpLeft, Minus, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Minus, MoreHorizontal, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { api, type BorrowingRecord } from '../lib/api';
 import { formatFine, type SeedUser } from '../lib/seed';
 import { InitialAvatar } from '../components/ui/InitialAvatar';
@@ -9,6 +9,8 @@ import { useNotifications } from '../lib/notifications';
 import { useToast } from '../lib/toast';
 
 const PAGE_SIZE = 10;
+
+
 
 export function Borrowing() {
   const toast = useToast();
@@ -113,17 +115,6 @@ export function Borrowing() {
     }
   };
 
-  const handleRenew = async (copyId: string) => {
-    try {
-      const updatedBorrowings = await api.renewBorrowing(copyId);
-      setBorrowings(updatedBorrowings);
-      await refresh();
-      toast.success('Loan renewed for 14 more days.');
-    } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'Unable to renew that loan.');
-    }
-  };
-
   const openBorrowModalSingle = (copyId: string) => {
     setActiveBorrowIds([copyId]);
     setUserSearchTerm('');
@@ -211,16 +202,18 @@ export function Borrowing() {
             <h2 className="text-[1.05rem] font-bold text-gray-900">All Circulation</h2>
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row items-center">
-            <label className="showcase-input min-w-[280px] px-3 h-[42px] bg-white border-gray-100 shadow-sm rounded-lg">
-               <input
+            <div className="relative flex-1 sm:w-64">
+              <input
                 type="text"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search by name or roll"
-                className="text-[13px] bg-transparent"
+                className="w-full bg-gray-50/80 border border-gray-100 rounded-lg py-2 px-4 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all placeholder:text-gray-400"
               />
-              <Search className="showcase-input-icon h-[18px] w-[18px] text-gray-400" />
-            </label>
+              <span className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-brand-primary">
+                <Search className="w-4 h-4 opacity-70" />
+              </span>
+            </div>
             <button type="button" className="reference-filter-button h-[42px] flex items-center justify-between gap-2 px-3 min-w-[120px] rounded-lg border-gray-100 shadow-sm">
               <CalendarDays className="h-4 w-4 text-gray-400" />
               <span className="text-[13px] text-gray-600">Last 30 days</span>
@@ -233,8 +226,10 @@ export function Borrowing() {
           <table className="showcase-table min-w-[980px]">
             <thead>
               <tr>
-                <th className="w-12">
-                  <div className="h-5 w-5 rounded border-2 border-gray-300" />
+                <th className="w-12 px-5">
+                   <label className="flex items-center cursor-pointer">
+                     <div className="h-4 w-4 rounded-[4px] border border-gray-200 bg-white"></div>
+                   </label>
                 </th>
                 <th>Book Title</th>
                 <th>Borrower Name</th>
@@ -246,16 +241,16 @@ export function Borrowing() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {pageItems.length > 0 ? pageItems.map((record, idx) => (
-                <tr key={record.copyId} className={`transition hover:bg-[#fcfaff] ${record.selected || idx === 3 ? 'is-selected' : ''}`}>
-                  <td className="w-12">
+              {pageItems.length > 0 ? pageItems.map((record) => (
+                <tr key={record.copyId} className={`transition hover:bg-[#fcfaff] ${record.selected ? 'is-selected' : ''}`}>
+                  <td className="w-12 px-5">
                     <button
                       type="button"
-                      onClick={() => toggleSelect(record.copyId)}
-                      className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] border border-gray-300 transition-colors ${(record.selected || idx === 3) ? 'border-[#7c2fd0] bg-[#7c2fd0] text-white' : 'text-transparent'}`}
+                      onClick={(e) => { e.stopPropagation(); toggleSelect(record.copyId); }}
+                      className={`flex h-4 w-4 items-center justify-center rounded-[4px] transition-colors ${record.selected ? 'bg-[#5218a5] text-white border-transparent' : 'border border-gray-200 bg-transparent text-transparent'}`}
                       aria-label={`Select ${record.copyId}`}
                     >
-                      <CheckIcon className="h-3 w-3" />
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
                     </button>
                   </td>
                   <td>
@@ -305,7 +300,7 @@ export function Borrowing() {
                         className="rounded-md p-1.5 transition hover:bg-red-50 hover:text-red-500"
                         aria-label={`Delete ${record.copyId}`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-[15px] w-[15px]" />
                       </button>
                     </div>
                   </td>
@@ -321,49 +316,7 @@ export function Borrowing() {
           </table>
         </div>
 
-        <div className="mt-5 flex flex-col items-center justify-between gap-4 pt-4 text-sm text-[#6f647d] sm:flex-row px-2 pb-2">
-          <div className="flex-1"></div>
-          
-           <div className="showcase-pagination flex-1 justify-center">
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={page === 1}
-              className="showcase-page-button hover:bg-transparent"
-              aria-label="Previous page"
-            >
-              <ChevronLeft className="mx-auto h-4 w-4 text-gray-400" />
-            </button>
-            {getVisiblePages(page, totalPages).map((item, index) => item === 'ellipsis' ? (
-              <span key={`ellipsis-${index}`} className="px-1 text-base">…</span>
-            ) : (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setPage(item)}
-                className={`showcase-page-button !h-7 !min-w-7 ${item === page ? '!bg-[#7c2fd0] !text-white !rounded-md !shadow-none' : 'hover:!bg-gray-50'}`}
-              >
-                {item}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-              disabled={page === totalPages}
-              className="showcase-page-button hover:bg-transparent"
-              aria-label="Next page"
-            >
-              <ChevronRight className="mx-auto h-4 w-4 text-gray-400" />
-            </button>
-          </div>
 
-          <div className="flex items-center justify-end flex-1 gap-3 text-[13px]">
-            <button type="button" className="reference-filter-button h-[36px] flex items-center justify-between gap-2 px-3 min-w-[90px] rounded-lg border border-gray-100 shadow-sm bg-white">
-              <span className="text-[13px] text-gray-600">{PAGE_SIZE} / page</span>
-              <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-          </div>
-        </div>
       </div>
 
       {recordToDelete ? (

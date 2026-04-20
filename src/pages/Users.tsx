@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Edit3, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Edit3, Plus, Search, Trash2, ChevronDown, MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { InitialAvatar } from '../components/ui/InitialAvatar';
 import { PageLoader } from '../components/ui/PageLoader';
@@ -115,20 +115,22 @@ export function Users() {
           <div>
             <h2 className="text-[1.05rem] font-bold text-gray-900">Users Information</h2>
           </div>
-          <div className="flex items-center gap-3">
-            <label className="showcase-input min-w-[280px] px-3 h-[42px] bg-white border-gray-100 shadow-sm rounded-lg">
-               <input
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-64">
+              <input
                 type="text"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search by name or roll"
-                className="text-[13px] bg-transparent"
+                className="w-full bg-gray-50/80 border border-gray-100 rounded-lg py-2 px-4 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all placeholder:text-gray-400"
               />
-              <Search className="showcase-input-icon h-[18px] w-[18px] text-gray-400" />
-            </label>
-            <button type="button" className="reference-filter-button h-[42px] flex items-center justify-between gap-2 px-3 min-w-[120px] rounded-lg border-gray-100 shadow-sm">
-              <span className="text-[13px] text-gray-600">Last 30 days</span>
-              <svg className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+              <span className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-brand-primary">
+                <Search className="w-4 h-4 opacity-70" />
+              </span>
+            </div>
+            <button className="flex items-center gap-2 border border-gray-100 text-gray-600 bg-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap">
+              Last 30 days
+              <ChevronDown className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -137,9 +139,9 @@ export function Users() {
           <table className="showcase-table min-w-[860px]">
             <thead>
               <tr className="bg-white border-b border-gray-50">
-                <th className="font-semibold text-gray-700 bg-white">
+                <th className="font-semibold text-gray-700 bg-white px-5">
                    <label className="flex items-center cursor-pointer">
-                     <input type="checkbox" className="rounded border-gray-300 text-[#7c2fd0] focus:ring-[#7c2fd0]" disabled />
+                     <div className="h-4 w-4 rounded-[4px] border border-gray-200 bg-white"></div>
                    </label>
                 </th>
                 <th className="font-semibold text-gray-700 bg-white">User Name</th>
@@ -152,20 +154,19 @@ export function Users() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {visibleUsers.length > 0 ? visibleUsers.map((student, idx) => (
+              {visibleUsers.length > 0 ? visibleUsers.map((student) => (
                 <tr
                   key={student.id}
                   onClick={() => navigate(`/users/${student.id}/profile`)}
-                  className={`cursor-pointer transition hover:bg-[#fcfaff] ${idx === 2 ? 'is-selected' : ''}`}
+                  className="cursor-pointer transition hover:bg-[#fcfaff]"
                 >
-                  <td className="w-12">
+                  <td className="w-12 px-5">
                     <label className="flex items-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
-                       <input type="checkbox" className="rounded border-gray-300 text-[#7c2fd0] focus:ring-[#7c2fd0]" defaultChecked={idx === 2} />
+                         <div className="h-4 w-4 rounded-[4px] border border-gray-200 bg-transparent"></div>
                     </label>
                   </td>
                   <td>
                     <div className="flex items-center gap-3">
-                      <InitialAvatar name={student.name} className="h-[30px] w-[30px] text-[11px]" />
                       <span className="font-medium text-gray-900">{student.name}</span>
                     </div>
                   </td>
@@ -175,17 +176,17 @@ export function Users() {
                   <td className="text-gray-500">{student.primaryEmail || '-'}</td>
                   <td className="text-gray-500">{student.primaryPhone || '-'}</td>
                   <td>
-                    <div className="flex items-center justify-center gap-3 text-gray-400">
+                    <div className="flex items-center justify-center gap-4 text-[#8f829f]">
                       <button
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
                           setRecordToDelete(student);
                         }}
-                        className="p-1 hover:text-gray-600 transition"
+                        className="hover:text-red-600 transition"
                         aria-label={`Delete ${student.name}`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-[15px] w-[15px]" />
                       </button>
                       <button
                         type="button"
@@ -193,10 +194,10 @@ export function Users() {
                           event.stopPropagation();
                           navigate(`/users/${student.id}/details`);
                         }}
-                        className="p-1 hover:text-gray-600 transition"
+                        className="hover:text-[#5218a5] transition"
                         aria-label={`Edit ${student.name}`}
                       >
-                        <Edit3 className="h-4 w-4" />
+                        <Edit3 className="h-[15px] w-[15px]" />
                       </button>
                     </div>
                   </td>
@@ -212,27 +213,24 @@ export function Users() {
           </table>
         </div>
 
-        <div className="mt-5 flex flex-col items-center justify-between gap-4 pt-4 text-sm text-[#6f647d] sm:flex-row px-2 pb-2">
-          <div className="flex-1"></div>
-          
-           <div className="showcase-pagination flex-1 justify-center">
+        <div className="p-6 border-t border-gray-100 flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-1 mx-auto text-sm">
             <button
               type="button"
               onClick={() => setPage((current) => Math.max(1, current - 1))}
               disabled={page === 1}
-              className="showcase-page-button hover:bg-transparent"
-              aria-label="Previous page"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50"
             >
-              <ChevronLeft className="mx-auto h-4 w-4 text-gray-400" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
             {getVisiblePages(page, totalPages).map((item, index) => item === 'ellipsis' ? (
-              <span key={`ellipsis-${index}`} className="px-1 text-base">…</span>
+              <span key={`ellipsis-${index}`} className="w-8 h-8 flex items-center justify-center text-gray-400"><MoreHorizontal className="w-4 h-4" /></span>
             ) : (
               <button
                 key={item}
                 type="button"
-                onClick={() => setPage(item)}
-                className={`showcase-page-button !h-7 !min-w-7 ${item === page ? '!bg-[#7c2fd0] !text-white !rounded-md !shadow-none' : 'hover:!bg-gray-50'}`}
+                onClick={() => setPage(item as number)}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg font-medium transition-colors ${item === page ? 'text-white bg-brand-primary' : 'text-gray-600 hover:bg-gray-50'}`}
               >
                 {item}
               </button>
@@ -241,17 +239,15 @@ export function Users() {
               type="button"
               onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
               disabled={page === totalPages}
-              className="showcase-page-button hover:bg-transparent"
-              aria-label="Next page"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50"
             >
-              <ChevronRight className="mx-auto h-4 w-4 text-gray-400" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-
-          <div className="flex items-center justify-end flex-1 gap-3 text-[13px]">
-            <button type="button" className="reference-filter-button h-[36px] flex items-center justify-between gap-2 px-3 min-w-[90px] rounded-lg border border-gray-100 shadow-sm bg-white">
-              <span className="text-[13px] text-gray-600">{PAGE_SIZE} / page</span>
-              <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+          <div className="flex items-center gap-2 mx-auto sm:mx-0">
+             <button className="flex items-center gap-2 border border-gray-100 text-gray-600 bg-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+              {PAGE_SIZE} / page
+              <ChevronDown className="w-4 h-4" />
             </button>
           </div>
         </div>
