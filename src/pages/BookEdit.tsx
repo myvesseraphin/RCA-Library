@@ -1,7 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Edit2, UploadCloud } from 'lucide-react';
+import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
+import { Edit2, Plus } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api, type BookMutationPayload } from '../lib/api';
+import { BookCoverArtwork } from '../components/ui/BookCoverArtwork';
+import { PageLoader } from '../components/ui/PageLoader';
+import { Spinner } from '../components/ui/Spinner';
+import { useNotifications } from '../lib/notifications';
+import { useToast } from '../lib/toast';
+import { toDateInputValue } from '../lib/utils';
 
 type BookFormData = BookMutationPayload;
 
@@ -20,8 +26,8 @@ function createEmptyForm(): BookFormData {
     isbn13: '',
     totalCopies: 1,
     className: '',
-    cover: '/logo.png',
-    detailCover: '/logo.png',
+    cover: '',
+    detailCover: '',
     summary: '',
   };
 }
@@ -29,19 +35,23 @@ function createEmptyForm(): BookFormData {
 export function BookEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
+  const { refresh } = useNotifications();
   const isCreateMode = !id;
+  const [isLoading, setIsLoading] = useState(!isCreateMode);
   const [formData, setFormData] = useState<BookFormData>(createEmptyForm);
-  const [error, setError] = useState<string | null>(null);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (isCreateMode) {
       setFormData(createEmptyForm());
-      setError(null);
+      setIsLoading(false);
       return;
     }
 
     let active = true;
+    setIsLoading(true);
 
     api.getBook(id)
       .then((data) => {
@@ -56,7 +66,7 @@ export function BookEdit() {
           writer: data.book.writer,
           bookId: data.book.bookId,
           deweyDecimal: data.book.deweyDecimal,
-          publishDate: data.book.publishDate,
+          publishDate: toDateInputValue(data.book.publishDate),
           publisher: data.book.publisher,
           language: data.book.language,
           pages: data.book.pages,
@@ -67,24 +77,26 @@ export function BookEdit() {
           detailCover: data.book.detailCover,
           summary: data.book.summary,
         });
-        setError(null);
       })
       .catch((reason: unknown) => {
+        toast.error(reason instanceof Error ? reason.message : 'Unable to load this book.');
+      })
+      .finally(() => {
         if (active) {
-          setError(reason instanceof Error ? reason.message : 'Unable to load this book.');
+          setIsLoading(false);
         }
       });
 
     return () => {
       active = false;
     };
-  }, [id, isCreateMode]);
+  }, [id, isCreateMode, toast]);
 
   const handleChange = (field: keyof BookFormData, value: string | number) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleCoverUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -93,8 +105,6 @@ export function BookEdit() {
 
     try {
       setIsUploadingCover(true);
-      setError(null);
-
       const uploadedCover = await api.uploadBookCover(file);
 
       setFormData((prev) => ({
@@ -102,8 +112,10 @@ export function BookEdit() {
         cover: uploadedCover.publicUrl,
         detailCover: uploadedCover.publicUrl,
       }));
+
+      toast.success('Cover image uploaded.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to upload the selected cover image.');
+      toast.error(reason instanceof Error ? reason.message : 'Unable to upload the selected cover image.');
     } finally {
       setIsUploadingCover(false);
       event.target.value = '';
@@ -112,156 +124,202 @@ export function BookEdit() {
 
   const handleSave = async () => {
     try {
+      setIsSaving(true);
+
       if (isCreateMode) {
         const createdBook = await api.createBook(formData);
+        await refresh();
+        toast.success('Book created successfully.');
         navigate(`/library/${createdBook.book.id}/details`, { replace: true });
         return;
       }
 
       await api.updateBook(id, formData);
+      await refresh();
+      toast.success('Book saved successfully.');
       navigate(`/library/${id}/details`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : isCreateMode ? 'Unable to create this book.' : 'Unable to save this book.');
+      toast.error(reason instanceof Error ? reason.message : isCreateMode ? 'Unable to create this book.' : 'Unable to save this book.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">{isCreateMode ? 'Add New Book' : 'Edit Book Information'}</h1>
-        <p className="text-gray-500 text-sm">Library <span className="mx-1">/</span> <span className="font-medium text-gray-700">{isCreateMode ? 'Add New Book' : 'Edit Book Information'}</span></p>
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+    <div className="page-shell">
+      <div className="mb-2">
+        <h1 className="mb-1 text-2xl font-bold text-gray-900">{isCreateMode ? 'Add Book Information' : 'Edit Book Information'}</h1>
+        <p className="text-sm text-gray-500">
+          {isCreateMode ? 'Create a new catalog record.' : 'Update the cover, summary, and details for this title.'}
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
-          <h2 className="text-lg font-bold text-gray-900 mb-6">{isCreateMode ? 'Book Cover & Summary' : 'Book Cover Upload & Summary Edit'}</h2>
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+        <section className="reference-card p-6 sm:p-8">
+          <h2 className="mb-6 text-lg font-bold text-gray-900">Book Cover Upload &amp; Summary Edit</h2>
 
-          <div className="flex flex-col sm:flex-row gap-6">
-            <div className="relative w-40 sm:w-48 shrink-0 rounded-lg overflow-hidden border border-gray-200 h-[260px] sm:h-[320px]">
-              <img
-                src={formData.detailCover || formData.cover}
-                alt={formData.title || 'Book Cover'}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
+          <div className="flex flex-col gap-6 sm:flex-row">
+            <div className="relative h-[260px] w-40 shrink-0 overflow-hidden rounded-lg border border-gray-200 sm:h-[320px] sm:w-48">
+              <BookCoverArtwork src={formData.detailCover || formData.cover} alt={formData.title || 'Book cover'} />
+              <label className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center bg-black/50 p-4 text-white">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-white/30 bg-white/20 backdrop-blur-sm transition-colors hover:bg-white/30">
+                  {isUploadingCover ? <Spinner className="h-6 w-6 border-2 border-white/30 border-t-white" /> : <Plus className="h-6 w-6" />}
+                </div>
+                <span className="mb-1 text-sm font-medium">{isUploadingCover ? 'Uploading cover...' : '+ Upload New Cover'}</span>
+                <span className="text-xs text-white/80">Replace the current book image</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={handleCoverUpload}
+                  disabled={isUploadingCover}
+                />
+              </label>
             </div>
 
-            <div className="flex-1 flex flex-col gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-1.5">Book Cover</label>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-brand-primary/40 bg-brand-secondary/40 px-4 py-3 text-sm font-medium text-brand-primary transition-colors hover:bg-brand-secondary">
-                  <UploadCloud className="w-4 h-4" />
-                  {isUploadingCover ? 'Uploading cover...' : 'Upload cover image'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    onChange={handleCoverUpload}
-                    disabled={isUploadingCover}
-                  />
-                </label>
-                <p className="mt-2 text-xs text-gray-500 break-all">
-                  {formData.cover && formData.cover !== '/logo.png'
-                    ? `Saved in bucket: ${formData.cover}`
-                    : 'No uploaded cover yet. Choose an image to save it to Supabase Storage.'}
-                </p>
-              </div>
+            <div className="flex flex-1 flex-col gap-4">
+              <InputField label="Title" value={formData.title} onChange={(value) => handleChange('title', value)} />
+              <InputField label="Subtitle" value={formData.subtitle} onChange={(value) => handleChange('subtitle', value)} />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-1.5">Title</label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) => handleChange('title', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 hover:border-gray-300 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-1.5">Subtitle</label>
-                <input
-                  type="text"
-                  value={formData.subtitle}
-                  onChange={(e) => handleChange('subtitle', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 hover:border-gray-300 transition-colors"
-                />
-              </div>
-              <div className="flex-1 flex flex-col">
-                <label className="block text-sm font-medium text-gray-900 mb-1.5">Synopsis/summary</label>
-                <div className="relative flex-1">
+              <div className="flex-1">
+                <label className="mb-1.5 block text-sm font-medium text-gray-900">Synopsis/summary</label>
+                <div className="relative">
                   <textarea
                     value={formData.summary}
-                    onChange={(e) => handleChange('summary', e.target.value)}
-                    className="w-full h-full min-h-[160px] border-2 border-[#6B31B2] rounded-lg px-3 py-3 pl-4 pr-9 text-sm focus:outline-none resize-none text-gray-800 font-medium"
+                    onChange={(event) => handleChange('summary', event.target.value)}
+                    className="min-h-[180px] w-full resize-none rounded-lg border-2 border-[#6B31B2] px-4 py-3 pr-9 text-sm font-medium text-gray-800 focus:outline-none"
                     style={{ lineHeight: '1.5' }}
                   />
-                  <Edit2 className="w-4 h-4 text-[#6B31B2] absolute top-3 right-3 pointer-events-none" />
+                  <Edit2 className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-[#6B31B2]" />
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
-          <h2 className="text-lg font-bold text-gray-900 mb-6">Book Details Form</h2>
+        <section className="reference-card p-6 sm:p-8">
+          <h2 className="mb-6 text-lg font-bold text-gray-900">Book Details Form</h2>
 
           <div className="grid grid-cols-[130px_1fr] items-center gap-y-3.5 text-sm">
-            <label className="font-medium text-gray-900">Subject</label>
-            <input type="text" value={formData.subject} onChange={(e) => handleChange('subject', e.target.value)} className="border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-primary hover:border-gray-300 transition-colors" />
+            <FormRow label="Subject">
+              <CompactInput value={formData.subject} onChange={(value) => handleChange('subject', value)} />
+            </FormRow>
+            <FormRow label="Author(s)">
+              <CompactInput value={formData.writer} onChange={(value) => handleChange('writer', value)} />
+            </FormRow>
+            <FormRow label="Library ID">
+              <CompactInput value={formData.bookId} onChange={(value) => handleChange('bookId', value)} disabled={!isCreateMode} placeholder={isCreateMode ? 'Generated if left blank' : ''} />
+            </FormRow>
+            <FormRow label="Class">
+              <CompactInput value={formData.className} onChange={(value) => handleChange('className', value)} />
+            </FormRow>
+            <FormRow label="Dewey Decimal">
+              <CompactInput value={formData.deweyDecimal} onChange={(value) => handleChange('deweyDecimal', value)} />
+            </FormRow>
+            <FormRow label="Publication Date">
+              <CompactInput type="date" value={formData.publishDate} onChange={(value) => handleChange('publishDate', value)} />
+            </FormRow>
+            <FormRow label="Publisher">
+              <CompactInput value={formData.publisher} onChange={(value) => handleChange('publisher', value)} />
+            </FormRow>
+            <FormRow label="Language">
+              <CompactInput value={formData.language} onChange={(value) => handleChange('language', value)} />
+            </FormRow>
+            <FormRow label="Pages">
+              <CompactInput type="number" value={String(formData.pages)} onChange={(value) => handleChange('pages', Number(value) || 0)} />
+            </FormRow>
+            <FormRow label="ISBN-13">
+              <CompactInput value={formData.isbn13} onChange={(value) => handleChange('isbn13', value)} />
+            </FormRow>
+            <FormRow label="Total Copies">
+              <CompactInput type="number" value={String(formData.totalCopies)} onChange={(value) => handleChange('totalCopies', Math.max(1, Number(value) || 1))} />
+            </FormRow>
 
-            <label className="font-medium text-gray-900">Author(s)</label>
-            <input type="text" value={formData.writer} onChange={(e) => handleChange('writer', e.target.value)} className="border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-primary hover:border-gray-300 transition-colors" />
-
-            <label className="font-medium text-gray-900">Library ID</label>
-            <div className="bg-gray-100 border border-gray-200 text-gray-500 rounded-md px-3 py-1.5 font-medium">
-              {isCreateMode ? 'Generated automatically on save' : formData.bookId}
-            </div>
-
-            <label className="font-medium text-gray-900">Class</label>
-            <input type="text" value={formData.className} onChange={(e) => handleChange('className', e.target.value)} className="border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-primary hover:border-gray-300 transition-colors" />
-
-            <div className="flex items-center justify-between font-medium text-gray-900 pr-3">
-              Dewey Decimal <Edit2 className="w-3.5 h-3.5 text-gray-400" />
-            </div>
-            <input type="text" value={formData.deweyDecimal} onChange={(e) => handleChange('deweyDecimal', e.target.value)} className="border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-primary hover:border-gray-300 transition-colors" />
-
-            <label className="font-medium text-gray-900">Publication Date</label>
-            <input type="text" value={formData.publishDate} onChange={(e) => handleChange('publishDate', e.target.value)} className="border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-primary hover:border-gray-300 transition-colors" />
-
-            <label className="font-medium text-gray-900">Publisher</label>
-            <input type="text" value={formData.publisher} onChange={(e) => handleChange('publisher', e.target.value)} className="border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-primary hover:border-gray-300 transition-colors" />
-
-            <label className="font-medium text-gray-900">Language</label>
-            <input type="text" value={formData.language} onChange={(e) => handleChange('language', e.target.value)} className="border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-primary hover:border-gray-300 transition-colors" />
-
-            <label className="font-medium text-gray-900">Pages</label>
-            <input type="number" value={formData.pages} onChange={(e) => handleChange('pages', Number(e.target.value))} className="border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-primary hover:border-gray-300 transition-colors" />
-
-            <div className="flex items-center justify-between font-medium text-gray-900 pr-3">
-              ISBN-13 <Edit2 className="w-3.5 h-3.5 text-gray-400" />
-            </div>
-            <input type="text" value={formData.isbn13} onChange={(e) => handleChange('isbn13', e.target.value)} className="border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-primary hover:border-gray-300 transition-colors" />
-
-            <label className="font-medium text-gray-900">Total Copies</label>
-            <input type="number" value={formData.totalCopies} onChange={(e) => handleChange('totalCopies', Number(e.target.value))} className="border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-primary hover:border-gray-300 transition-colors" />
-            <div className="col-span-2 mt-4 flex justify-end gap-3 pt-6 border-t border-transparent">
-              <button
-                onClick={handleSave}
-                disabled={isUploadingCover}
-                className="px-6 py-2 bg-[#6B31B2] text-white font-medium rounded-lg hover:bg-brand-hover transition-colors shadow-sm"
-              >
-                {isCreateMode ? 'Create Book' : 'Save Changes'}
+            <div className="col-span-2 mt-4 flex justify-end gap-3 border-t border-transparent pt-6">
+              <button type="button" onClick={() => navigate(-1)} className="reference-muted-button">
+                Cancel
               </button>
               <button
-                onClick={() => navigate(-1)}
-                className="px-6 py-2 bg-[#E2DFE9] text-[#4A4A4A] font-medium rounded-lg hover:bg-gray-300 transition-colors shadow-sm"
+                type="button"
+                onClick={handleSave}
+                disabled={isUploadingCover || isSaving}
+                className="reference-primary-button px-6 disabled:cursor-not-allowed disabled:opacity-75"
               >
-                Cancel
+                {isSaving ? <Spinner className="h-4 w-4 border-2 border-white/30 border-t-white" /> : null}
+                <span>{isCreateMode ? 'Create Book' : 'Save Changes'}</span>
               </button>
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
+  );
+}
+
+function InputField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  disabled = false,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-medium text-gray-900">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm transition-colors hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 disabled:cursor-not-allowed disabled:bg-gray-100"
+      />
+    </label>
+  );
+}
+
+function FormRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <label className="font-medium text-gray-900">{label}</label>
+      {children}
+    </>
+  );
+}
+
+function CompactInput({
+  value,
+  onChange,
+  type = 'text',
+  disabled = false,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      disabled={disabled}
+      placeholder={placeholder}
+      className="w-full rounded-md border border-gray-200 px-3 py-1.5 transition-colors hover:border-gray-300 focus:outline-none focus:border-brand-primary disabled:cursor-not-allowed disabled:bg-gray-100"
+    />
   );
 }

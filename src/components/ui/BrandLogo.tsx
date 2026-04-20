@@ -6,11 +6,13 @@ export function BrandLogo({
   imageClassName,
   titleClassName,
   subtitleClassName,
+  title,
 }: {
   className?: string;
   imageClassName?: string;
   titleClassName?: string;
   subtitleClassName?: string;
+  title?: string;
 }) {
   return (
     <div className={cn('flex items-center gap-3', className)}>
@@ -21,7 +23,7 @@ export function BrandLogo({
       />
       <div>
         <p className={cn('text-xl font-bold tracking-tight text-brand-primary', titleClassName)}>
-          {appBrand.name}
+          {title ?? appBrand.name}
         </p>
         {appBrand.subtitle ? (
           <p className={cn('text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-muted', subtitleClassName)}>

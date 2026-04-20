@@ -1,5 +1,12 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { type AuthenticatedRequest, loginStaff, requireAuth } from './auth.ts';
+import {
+  type AuthenticatedRequest,
+  loginStaff,
+  requestPasswordReset,
+  requireAuth,
+  resetPassword,
+  verifyPasswordResetCode,
+} from './auth.ts';
 import {
   createBorrowing,
   createBook,
@@ -13,12 +20,19 @@ import {
   getBookHistory,
   getBorrowings,
   getDashboardData,
+  payFineRecord,
+  renewBorrowing,
   getUserById,
   getUserProfile,
   returnBorrowing,
   updateBookById,
   updateUserById,
 } from './library-store.ts';
+import {
+  getNotifications,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+} from './notification-store.ts';
 import { uploadBookCoverToSupabase } from './supabase-storage.ts';
 
 type AsyncRouteHandler = (request: Request, response: Response, next: NextFunction) => Promise<void>;
@@ -49,6 +63,24 @@ apiRouter.post('/auth/login', asyncHandler(async (request, response) => {
   response.json(session);
 }));
 
+apiRouter.post('/auth/password-reset/request', asyncHandler(async (request, response) => {
+  response.json(await requestPasswordReset(String(request.body?.email ?? '')));
+}));
+
+apiRouter.post('/auth/password-reset/verify', asyncHandler(async (request, response) => {
+  response.json(await verifyPasswordResetCode(
+    String(request.body?.email ?? ''),
+    String(request.body?.code ?? ''),
+  ));
+}));
+
+apiRouter.post('/auth/password-reset/complete', asyncHandler(async (request, response) => {
+  response.json(await resetPassword(
+    String(request.body?.resetToken ?? ''),
+    String(request.body?.password ?? ''),
+  ));
+}));
+
 apiRouter.use(requireAuth);
 
 apiRouter.get('/auth/me', asyncHandler(async (request, response) => {
@@ -70,8 +102,32 @@ apiRouter.post('/uploads/book-cover', asyncHandler(async (request, response) => 
   }));
 }));
 
-apiRouter.get('/dashboard', asyncHandler(async (_request, response) => {
-  response.json(await getDashboardData());
+apiRouter.get('/dashboard', asyncHandler(async (request, response) => {
+  const authUser = (request as AuthenticatedRequest).authUser;
+  response.json(await getDashboardData({
+    name: authUser.name,
+    role: authUser.role,
+  }));
+}));
+
+apiRouter.get('/notifications', asyncHandler(async (_request, response) => {
+  response.json(await getNotifications());
+}));
+
+apiRouter.post('/notifications/read-all', asyncHandler(async (_request, response) => {
+  await markAllNotificationsAsRead();
+  response.status(204).send();
+}));
+
+apiRouter.post('/notifications/:id/read', asyncHandler(async (request, response) => {
+  const notification = await markNotificationAsRead(Number(request.params.id));
+
+  if (!notification) {
+    response.status(404).json({ message: 'Notification not found.' });
+    return;
+  }
+
+  response.json(notification);
 }));
 
 apiRouter.get('/users', asyncHandler(async (_request, response) => {
@@ -183,6 +239,10 @@ apiRouter.post('/borrowings/:copyId/return', asyncHandler(async (request, respon
   response.json(await returnBorrowing(request.params.copyId));
 }));
 
+apiRouter.post('/borrowings/:copyId/renew', asyncHandler(async (request, response) => {
+  response.json(await renewBorrowing(request.params.copyId));
+}));
+
 apiRouter.delete('/borrowings/:copyId', asyncHandler(async (request, response) => {
   const result = await deleteBorrowing(request.params.copyId);
 
@@ -192,4 +252,8 @@ apiRouter.delete('/borrowings/:copyId', asyncHandler(async (request, response) =
   }
 
   response.status(204).send();
+}));
+
+apiRouter.post('/users/:id/fines/:fineId/pay', asyncHandler(async (request, response) => {
+  response.json(await payFineRecord(Number(request.params.id), request.params.fineId));
 }));

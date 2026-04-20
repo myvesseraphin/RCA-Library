@@ -1,14 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { Search, ChevronDown, Trash2, Edit3, Plus, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, Edit3, Plus, Search, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { BookCoverArtwork } from '../components/ui/BookCoverArtwork';
+import { PageLoader } from '../components/ui/PageLoader';
 import type { SeedBook } from '../lib/seed';
 import { api } from '../lib/api';
+import { useNotifications } from '../lib/notifications';
+import { useToast } from '../lib/toast';
+
+const PAGE_SIZE = 8;
 
 export function Library() {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { refresh } = useNotifications();
   const [books, setBooks] = useState<SeedBook[]>([]);
   const [recordToDelete, setRecordToDelete] = useState<SeedBook | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -21,24 +31,46 @@ export function Library() {
       })
       .catch((reason: unknown) => {
         if (active) {
-          setError(reason instanceof Error ? reason.message : 'Unable to load books.');
+          toast.error(reason instanceof Error ? reason.message : 'Unable to load books.');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
         }
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [toast]);
 
-  const toggleSelect = (id: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setBooks((current) => current.map((book) => book.id === id ? { ...book, selected: !book.selected } : book));
-  };
+  const filteredBooks = useMemo(() => books.filter((book) => {
+    const query = searchTerm.trim().toLowerCase();
 
-  const handleDeleteClick = (record: SeedBook, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setRecordToDelete(record);
-  };
+    if (!query) {
+      return true;
+    }
+
+    return [
+      book.title,
+      book.writer,
+      book.bookId,
+      book.subject,
+      book.className,
+    ].some((value) => value.toLowerCase().includes(query));
+  }), [books, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredBooks.length / PAGE_SIZE));
+  const visibleBooks = filteredBooks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   const confirmDelete = async () => {
     if (!recordToDelete) {
@@ -49,115 +81,115 @@ export function Library() {
       await api.deleteBook(recordToDelete.id);
       setBooks((current) => current.filter((book) => book.id !== recordToDelete.id));
       setRecordToDelete(null);
-      setError(null);
+      await refresh();
+      toast.success('Book removed from the catalog.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to delete that book.');
+      toast.error(reason instanceof Error ? reason.message : 'Unable to delete that book.');
     }
   };
 
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-       <div className="flex justify-between items-end mb-2">
-       <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Library</h1>
-          <p className="text-gray-500 text-sm">Home <span className="mx-1">/</span> <span className="font-medium text-gray-700">Library Books</span></p>
-          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+    <div className="page-shell">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="mb-1 text-2xl font-bold text-gray-900">Library</h1>
+          <p className="text-sm text-gray-500">Library / Books Catalog</p>
         </div>
         <button
+          type="button"
           onClick={() => navigate('/library/new/edit')}
-          className="bg-white border text-brand-primary border-brand-primary font-medium px-4 py-2.5 rounded-lg flex items-center gap-2 hover:bg-brand-secondary transition-colors"
+          className="reference-outline-button"
         >
-          <Plus className="w-5 h-5" />
-          Add Book
+          <Plus className="h-5 w-5" />
+          Add book
         </button>
       </div>
 
-       <div className="bg-white rounded-2xl shadow-sm border border-gray-100/50 overflow-hidden">
-        <div className="p-6 pb-4 flex flex-col sm:flex-row justify-between items-center gap-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">All Books</h2>
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-64">
-              <input
-                type="text"
-                placeholder="Search by name or roll"
-                className="w-full bg-gray-50/80 border border-gray-100 rounded-lg py-2 px-4 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all placeholder:text-gray-400"
-              />
-              <span className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-brand-primary">
-                <Search className="w-4 h-4 opacity-70" />
-              </span>
-            </div>
-            <button className="flex items-center gap-2 border border-gray-100 text-gray-600 bg-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap">
-              Last 30 days
-              <ChevronDown className="w-4 h-4" />
-            </button>
+      <div className="showcase-table-card p-5">
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-[1.1rem] font-bold text-gray-900">All Books</h2>
+            <p className="mt-1 text-sm text-gray-500">{filteredBooks.length} book{filteredBooks.length === 1 ? '' : 's'} in the catalog</p>
           </div>
+          <label className="showcase-input min-w-[280px] px-3">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search by title, author, subject..."
+            />
+            <Search className="showcase-input-icon h-4 w-4" />
+          </label>
         </div>
 
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+          <table className="showcase-table min-w-[860px]">
             <thead>
-               <tr className="border-b border-gray-100">
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm w-12">
-                  <div className="w-5 h-5 border-2 rounded border-gray-300"></div>
-                </th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Book Name</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Writer</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Id</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Subject</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Class</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Publish Date</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm text-center">Action</th>
+              <tr>
+                <th>Book Name</th>
+                <th>Writer</th>
+                <th>Id</th>
+                <th>Subject</th>
+                <th>Class</th>
+                <th>Publish Date</th>
+                <th className="text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
-              {books.length > 0 ? books.map((book) => (
-                <tr 
-                  key={book.id} 
-                  className={`hover:bg-gray-50/50 transition-colors cursor-pointer ${book.selected ? 'bg-brand-primary/5' : ''}`}
+            <tbody>
+              {visibleBooks.length > 0 ? visibleBooks.map((book) => (
+                <tr
+                  key={book.id}
                   onClick={() => navigate(`/library/${book.id}/details`)}
+                  className="cursor-pointer"
                 >
-                   <td className="px-6 py-4">
-                    <div 
-                      className={`w-5 h-5 border-2 rounded flex items-center justify-center cursor-pointer transition-colors ${book.selected ? 'border-brand-primary bg-brand-primary' : 'border-gray-300'}`}
-                      onClick={(e) => toggleSelect(book.id, e)}
-                    >
-                      {book.selected && <CheckIcon className="w-3.5 h-3.5 text-white" />}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
+                  <td>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border border-gray-100 bg-gray-50">
-                        <img src={book.cover} alt={book.title} className="w-full h-full object-cover shadow-sm" />
+                      <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-gray-100 bg-gray-50 shadow-sm">
+                        <BookCoverArtwork src={book.cover} alt={book.title} compact />
                       </div>
-                      <span className="font-semibold text-gray-800 text-sm">{book.title}</span>
+                      <span className="font-semibold text-gray-900">{book.title}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 font-medium">{book.writer}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600 font-medium">{book.bookId}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{book.subject}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600 font-medium">{book.className}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{book.publishDate}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-center gap-2">
-                       <button 
-                         onClick={(e) => handleDeleteClick(book, e)}
-                         className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-md hover:bg-red-50"
-                       >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); navigate(`/library/${book.id}/edit`); }}
-                        className="p-1.5 text-gray-400 hover:text-brand-primary transition-colors rounded-md hover:bg-brand-secondary"
+                  <td className="font-medium text-gray-700">{book.writer}</td>
+                  <td className="font-semibold text-gray-800">{book.bookId}</td>
+                  <td>{book.subject}</td>
+                  <td className="font-medium text-gray-700">{book.className}</td>
+                  <td>{book.publishDate || '-'}</td>
+                  <td>
+                    <div className="flex items-center justify-center gap-2 text-gray-400">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/library/${book.id}/edit`);
+                        }}
+                        className="rounded-md p-1.5 transition hover:bg-brand-secondary hover:text-brand-primary"
+                        aria-label={`Edit ${book.title}`}
                       >
-                        <Edit3 className="w-4 h-4" />
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setRecordToDelete(book);
+                        }}
+                        className="rounded-md p-1.5 transition hover:bg-red-50 hover:text-red-500"
+                        aria-label={`Delete ${book.title}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
-                    No books yet. Add the first book.
+                  <td colSpan={7} className="px-6 py-14 text-center text-sm text-gray-500">
+                    No books match your current search.
                   </td>
                 </tr>
               )}
@@ -165,70 +197,98 @@ export function Library() {
           </table>
         </div>
 
-        {/* Pagination - Matching design but active is page 3 */}
-        <div className="p-6 border-t border-gray-100 flex items-center justify-between flex-wrap gap-4">
-           <div className="flex items-center gap-1 mx-auto text-sm">
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50"><ChevronLeft className="w-4 h-4" /></button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-50 font-medium">1</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-50 font-medium">2</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-brand-primary bg-brand-primary text-white font-medium">3</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-50 font-medium">4</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-50 font-medium">5</button>
-            <span className="w-8 h-8 flex items-center justify-center text-gray-400"><MoreHorizontal className="w-4 h-4" /></span>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-50 font-medium">100</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50"><ChevronRight className="w-4 h-4" /></button>
-          </div>
-          <div className="flex items-center gap-2 mx-auto sm:mx-0">
-             <button className="flex items-center gap-2 border border-gray-100 text-gray-600 bg-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-              10 / page
-              <ChevronDown className="w-4 h-4" />
+        <div className="mt-5 flex flex-col items-center justify-between gap-4 border-t border-[#f3edf8] pt-4 text-sm text-[#6f647d] sm:flex-row">
+          <div className="showcase-pagination">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+              className="showcase-page-button"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="mx-auto h-4 w-4" />
             </button>
+            {getVisiblePages(page, totalPages).map((item, index) => item === 'ellipsis' ? (
+              <span key={`ellipsis-${index}`} className="px-1 text-base">…</span>
+            ) : (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setPage(item)}
+                className={`showcase-page-button ${item === page ? 'is-active' : ''}`}
+              >
+                {item}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page === totalPages}
+              className="showcase-page-button"
+              aria-label="Next page"
+            >
+              <ChevronRight className="mx-auto h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 text-sm">
+            <span>{filteredBooks.length} records</span>
+            <div className="showcase-input h-auto min-h-0 w-auto gap-2 px-3 py-1.5">
+              <span className="showcase-input-value text-sm">{PAGE_SIZE} / page</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {recordToDelete && (
-        <div className="fixed inset-0 z-50 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[440px] overflow-hidden">
-            <div className="p-5 border-b border-gray-100 flex items-center gap-3 bg-gray-50/50">
-              <Trash2 className="w-5 h-5 text-brand-primary" />
+      {recordToDelete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+          <div className="reference-modal">
+            <div className="reference-modal-header">
+              <Trash2 className="h-5 w-5 text-brand-primary" />
               <h3 className="text-[17px] font-bold text-gray-900">Confirm Deletion</h3>
             </div>
-            
-            <div className="p-6">
-              <p className="text-[15px] text-gray-800 leading-relaxed mb-6">
-                Are you sure you want to delete the library record for 
-                '{recordToDelete.title}' by {recordToDelete.writer} (ID {recordToDelete.bookId})? 
-                This action cannot be undone.
+
+            <div className="reference-modal-body">
+              <p className="text-[15px] leading-relaxed text-gray-800">
+                Are you sure you want to delete the library record for &apos;{recordToDelete.title}&apos; by {recordToDelete.writer} ({recordToDelete.bookId})? This action cannot be undone.
               </p>
             </div>
-            
-            <div className="p-5 border-t border-gray-100 flex gap-4">
-              <button 
+
+            <div className="reference-modal-actions">
+              <button
+                type="button"
                 onClick={() => setRecordToDelete(null)}
-                className="flex-1 px-6 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                className="flex-1 rounded-lg bg-gray-200 px-6 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-300"
               >
                 Cancel
               </button>
-              <button 
+              <button
+                type="button"
                 onClick={confirmDelete}
-                className="flex-1 px-6 py-2.5 bg-brand-primary text-white font-medium rounded-lg hover:bg-brand-hover transition-colors shadow-sm shadow-brand-primary/20"
+                className="reference-primary-button flex-1 justify-center px-6"
               >
                 Yes, Delete
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
-function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
+function getVisiblePages(currentPage: number, totalPages: number) {
+  if (totalPages <= 6) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  if (currentPage <= 3) {
+    return [1, 2, 3, 4, 'ellipsis', totalPages] as const;
+  }
+
+  if (currentPage >= totalPages - 2) {
+    return [1, 'ellipsis', totalPages - 3, totalPages - 2, totalPages - 1, totalPages] as const;
+  }
+
+  return [1, 'ellipsis', currentPage - 1, currentPage, currentPage + 1, 'ellipsis', totalPages] as const;
 }

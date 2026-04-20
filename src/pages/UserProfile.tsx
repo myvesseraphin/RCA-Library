@@ -1,10 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { LineChart, Line, XAxis, ResponsiveContainer, BarChart, Bar, Cell, YAxis, CartesianGrid } from 'recharts';
-import { CornerUpLeft, RefreshCw, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
+import { CornerUpLeft, RefreshCw } from 'lucide-react';
 import { InitialAvatar } from '../components/ui/InitialAvatar';
+import { BookCoverArtwork } from '../components/ui/BookCoverArtwork';
+import { PageLoader } from '../components/ui/PageLoader';
 import { api, type UserProfileData } from '../lib/api';
 import { formatFine, formatRwf } from '../lib/seed';
+import { useNotifications } from '../lib/notifications';
+import { useToast } from '../lib/toast';
 
 const summaryChartData = [
   { name: 'Jan', val: 5 },
@@ -34,187 +38,248 @@ const finesChartData = [
 
 export function UserProfile() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { refresh } = useNotifications();
   const [profile, setProfile] = useState<UserProfileData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fineFilter, setFineFilter] = useState<'all' | 'paid' | 'owed'>('all');
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'borrowed' | 'returned'>('all');
 
-  useEffect(() => {
+  const loadProfile = useCallback(async () => {
     if (!id) {
       return;
     }
 
-    let active = true;
+    setIsLoading(true);
 
-    api.getUserProfile(id)
-      .then((data) => {
-        if (active) {
-          setProfile(data);
-          setError(null);
-        }
-      })
-      .catch((reason: unknown) => {
-        if (active) {
-          setError(reason instanceof Error ? reason.message : 'Unable to load the borrower profile.');
-        }
-      });
+    try {
+      const data = await api.getUserProfile(id);
+      setProfile(data);
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : 'Unable to load the borrower profile.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, toast]);
 
-    return () => {
-      active = false;
-    };
-  }, [id]);
+  useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
 
-  if (!profile) {
-    return (
-      <div className="max-w-7xl mx-auto space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">Borrower Profile</h1>
-        <p className="text-sm text-gray-500">{error ?? 'Loading borrower profile...'}</p>
-      </div>
-    );
+  const fineHistory = useMemo(() => {
+    if (!profile) {
+      return [];
+    }
+
+    if (fineFilter === 'paid') {
+      return profile.fineHistory.filter((record) => record.amountOwedRwf === 0);
+    }
+
+    if (fineFilter === 'owed') {
+      return profile.fineHistory.filter((record) => record.amountOwedRwf > 0);
+    }
+
+    return profile.fineHistory;
+  }, [fineFilter, profile]);
+
+  const borrowHistory = useMemo(() => {
+    if (!profile) {
+      return [];
+    }
+
+    if (historyFilter === 'borrowed') {
+      return profile.borrowHistory.filter((record) => record.status === 'Borrowed');
+    }
+
+    if (historyFilter === 'returned') {
+      return profile.borrowHistory.filter((record) => record.status === 'Returned');
+    }
+
+    return profile.borrowHistory;
+  }, [historyFilter, profile]);
+
+  const handleReturn = async (copyId: string) => {
+    try {
+      await api.returnBorrowing(copyId);
+      await refresh();
+      await loadProfile();
+      toast.success('Book returned successfully.');
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : 'Unable to return that copy.');
+    }
+  };
+
+  const handleRenew = async (copyId: string) => {
+    try {
+      await api.renewBorrowing(copyId);
+      await refresh();
+      await loadProfile();
+      toast.success('Loan renewed.');
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : 'Unable to renew that copy.');
+    }
+  };
+
+  const handlePayFine = async (fineId: string) => {
+    if (!id) {
+      return;
+    }
+
+    try {
+      await api.payFine(id, fineId);
+      await refresh();
+      await loadProfile();
+      toast.success('Fine payment recorded.');
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : 'Unable to record that payment.');
+    }
+  };
+
+  if (isLoading) {
+    return <PageLoader />;
   }
 
-  const { user, currentBorrowings, fineHistory, borrowHistory } = profile;
+  if (!profile) {
+    return null;
+  }
+
+  const { user, currentBorrowings } = profile;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300 pb-12">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
+    <div className="page-shell pb-12">
+      <div className="mb-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Borrower Profile: {user.name} ({user.className})</h1>
-          <p className="text-gray-500 text-sm">Library <span className="mx-1">/</span> <span className="font-medium text-gray-700">Borrower Profile</span></p>
-          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+          <h1 className="mb-1 text-2xl font-bold text-gray-900">Borrower Profile: {user.name}</h1>
+          <p className="text-sm text-gray-500">Library / Borrower Profile</p>
         </div>
         <div className="flex items-center gap-3">
-          <InitialAvatar name={user.name} className="w-12 h-12 text-base" />
+          <InitialAvatar name={user.name} className="h-12 w-12 text-sm" />
           <div>
-            <h2 className="text-gray-900 font-bold text-base leading-tight">{user.name}</h2>
-            <p className="text-gray-500 text-sm">Class: {user.className}</p>
+            <h2 className="text-base font-bold leading-tight text-gray-900">{user.name}</h2>
+            <p className="text-sm text-gray-500">Class: {user.className}</p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
-          <h3 className="text-[17px] font-bold text-gray-900 mb-6">Personal Details</h3>
-          <div className="flex-1 grid grid-cols-2 gap-y-6 content-start">
-            <div>
-              <p className="text-gray-500 text-[13px] font-medium mb-1">Name</p>
-              <p className="text-gray-900 font-bold text-base">{user.name}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-[13px] font-medium mb-1">Class</p>
-              <p className="text-gray-900 font-bold text-base">{user.className}</p>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <section className="reference-card flex flex-col p-6">
+          <h3 className="mb-6 text-[17px] font-bold text-gray-900">Personal Details</h3>
+          <div className="grid flex-1 grid-cols-2 content-start gap-y-6">
+            <ProfileStat label="Name" value={user.name} />
+            <ProfileStat label="Class" value={user.className} />
+            <div className="col-span-2">
+              <ProfileStat label="Student ID" value={user.studentId} />
             </div>
             <div className="col-span-2">
-              <p className="text-gray-500 text-[13px] font-medium mb-1">Student ID</p>
-              <p className="text-gray-900 font-bold text-base">{user.studentId}</p>
-            </div>
-            <div className="col-span-2">
-              <p className="text-gray-500 text-[13px] font-medium mb-1">Contact info:</p>
-              <p className="text-gray-900 font-bold text-[13px] mt-0.5">{user.primaryEmail}</p>
+              <ProfileStat label="Contact info" value={user.primaryEmail || '-'} />
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
-          <h3 className="text-[17px] font-bold text-gray-900 mb-4">Borrowing Summary</h3>
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div>
-              <p className="text-gray-500 text-[11px] font-medium leading-tight mb-1">Lifetime Borrowed:</p>
-              <p className="text-gray-900 font-bold text-xl">{user.lifetimeBorrowed} Books</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-[11px] font-medium leading-tight mb-1">Current Loans:</p>
-              <p className="text-gray-900 font-bold text-xl">{currentBorrowings.length}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-[11px] font-medium leading-tight mb-1">Total Overdue Events:</p>
-              <p className="text-gray-900 font-bold text-xl">{user.overdueEvents}</p>
-            </div>
+        <section className="reference-card flex flex-col p-6">
+          <h3 className="mb-4 text-[17px] font-bold text-gray-900">Borrowing Summary</h3>
+          <div className="mb-6 grid grid-cols-3 gap-4">
+            <SummaryMetric label="Lifetime Borrowed" value={`${user.lifetimeBorrowed} Books`} />
+            <SummaryMetric label="Current Loans" value={`${currentBorrowings.length}`} />
+            <SummaryMetric label="Overdue Events" value={`${user.overdueEvents}`} />
           </div>
-          <div className="flex-1 min-h-[140px] w-full">
+          <div className="min-h-[140px] w-full flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={summaryChartData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} ticks={[0, 20, 40, 60, 80]} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} ticks={[0, 10, 20, 30, 40]} />
                 <Line type="monotone" dataKey="val" stroke="#7E22CE" strokeWidth={2} dot={false} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </section>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
-          <h3 className="text-[17px] font-bold text-gray-900 mb-4">Fines & Payments</h3>
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div>
-              <p className="text-gray-500 text-[12px] font-medium mb-1">Total Owed Fines:</p>
-              <p className="text-gray-900 font-bold text-2xl">{formatFine(user.totalFinesOwedRwf)}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-[12px] font-medium mb-1">Total Fines Paid:</p>
-              <p className="text-gray-900 font-bold text-2xl">{formatRwf(user.totalFinesPaidRwf)}</p>
-            </div>
+        <section className="reference-card flex flex-col p-6">
+          <h3 className="mb-4 text-[17px] font-bold text-gray-900">Fines &amp; Payments</h3>
+          <div className="mb-6 grid grid-cols-2 gap-4">
+            <SummaryMetric label="Total Owed Fines" value={formatFine(user.totalFinesOwedRwf)} />
+            <SummaryMetric label="Total Fines Paid" value={formatRwf(user.totalFinesPaidRwf)} />
           </div>
-          <div className="flex-1 min-h-[140px] w-full mt-auto">
+          <div className="mt-auto min-h-[140px] w-full flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={finesChartData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }} barSize={10}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} ticks={[0, 10, 20, 30, 40]} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} ticks={[0, 5, 10]} />
                 <Bar dataKey="val" radius={[2, 2, 0, 0]} isAnimationActive={false}>
                   {finesChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.type === 'purple' ? '#7E22CE' : '#10B981'} />
+                    <Cell key={`${entry.name}-${index}`} fill={entry.type === 'purple' ? '#7E22CE' : '#10B981'} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </section>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-50">
-          <h3 className="text-[17px] font-bold text-gray-900">Current Loans</h3>
+      <section className="reference-card flex flex-col overflow-hidden">
+        <div className="border-b border-gray-50 px-6 py-5">
+          <div className="flex items-center justify-between gap-4">
+            <h3 className="text-[17px] font-bold text-gray-900">Current Loans</h3>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => navigate(`/users/${user.id}/details`)} className="reference-outline-button px-4 py-2 text-sm">
+                Edit Borrower
+              </button>
+              <button type="button" onClick={() => navigate('/borrowing')} className="reference-secondary-button px-4 py-2 text-sm">
+                Open Borrowing
+              </button>
+            </div>
+          </div>
         </div>
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left text-sm min-w-[800px]">
+          <table className="reference-table min-w-[860px]">
             <thead>
-              <tr className="bg-gray-50/50">
-                <th className="px-6 py-3.5 font-semibold text-gray-800 text-[13px]">Copy ID</th>
-                <th className="px-6 py-3.5 font-semibold text-gray-800 text-[13px]">Book Title</th>
-                <th className="px-6 py-3.5 font-semibold text-gray-800 text-[13px]">Subject</th>
-                <th className="px-6 py-3.5 font-semibold text-gray-800 text-[13px]">Due Date</th>
-                <th className="px-6 py-3.5 font-semibold text-gray-800 text-[13px]">Status</th>
-                <th className="px-6 py-3.5 font-semibold text-gray-800 text-[13px]">Fines Accrued</th>
-                <th className="px-6 py-3.5 font-semibold text-gray-800 text-[13px] w-24">Actions</th>
+              <tr>
+                <th>Copy ID</th>
+                <th>Book Title</th>
+                <th>Subject</th>
+                <th>Due Date</th>
+                <th>Status</th>
+                <th>Fines Accrued</th>
+                <th className="w-24">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody>
               {currentBorrowings.length > 0 ? currentBorrowings.map((entry) => (
-                <tr key={entry.copyId} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 text-gray-800 font-medium">{entry.copyId}</td>
-                  <td className="px-6 py-4">
+                <tr key={entry.copyId}>
+                  <td className="font-medium text-gray-800">{entry.copyId}</td>
+                  <td>
                     <div className="flex items-center gap-3">
-                      <img src={entry.book.cover} alt={entry.book.title} className="w-8 h-8 rounded-full border border-gray-200 object-cover" referrerPolicy="no-referrer" />
+                      <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+                        <BookCoverArtwork src={entry.book.cover} alt={entry.book.title} compact />
+                      </div>
                       <span className="font-semibold text-gray-800">{entry.book.title}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-gray-800">{entry.book.subject}</td>
-                  <td className="px-6 py-4 text-gray-800 font-medium whitespace-nowrap">{entry.dueDate ?? '-'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded text-xs font-semibold ${entry.status === 'Overdue' ? 'bg-red-200/60 text-red-700' : 'bg-green-200/60 text-green-700'}`}>
+                  <td className="text-gray-800">{entry.book.subject}</td>
+                  <td className="font-medium whitespace-nowrap text-gray-800">{entry.dueDate ?? '-'}</td>
+                  <td>
+                    <span className={`rounded px-3 py-1 text-xs font-semibold ${entry.status === 'Overdue' ? 'bg-red-200/60 text-red-700' : 'bg-green-200/60 text-green-700'}`}>
                       {entry.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-gray-800 font-medium">{formatFine(entry.fineRwf)}</td>
-                  <td className="px-6 py-4 text-gray-500">
+                  <td className="font-medium text-gray-800">{formatFine(entry.fineRwf)}</td>
+                  <td className="text-gray-500">
                     <div className="flex items-center gap-3">
-                      <button className="hover:text-gray-900 transition-colors"><CornerUpLeft className="w-4 h-4" /></button>
-                      <button className="hover:text-gray-900 transition-colors"><RefreshCw className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => handleReturn(entry.copyId)} className="transition-colors hover:text-gray-900" aria-label={`Return ${entry.copyId}`}>
+                        <CornerUpLeft className="h-4 w-4" />
+                      </button>
+                      <button type="button" onClick={() => handleRenew(entry.copyId)} className="transition-colors hover:text-gray-900" aria-label={`Renew ${entry.copyId}`}>
+                        <RefreshCw className="h-4 w-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">
+                  <td colSpan={7} className="px-6 py-14 text-center text-sm text-gray-500">
                     No active loans for this borrower.
                   </td>
                 </tr>
@@ -222,53 +287,52 @@ export function UserProfile() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       <div className="flex flex-col gap-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden h-[340px]">
-          <div className="px-6 pt-5 pb-4">
-            <h3 className="text-[17px] font-bold text-gray-900 mb-4">Detailed Fine History</h3>
+        <section className="reference-card flex h-[340px] flex-col overflow-hidden">
+          <div className="px-6 pb-4 pt-5">
+            <h3 className="mb-4 text-[17px] font-bold text-gray-900">Detailed Fine History</h3>
             <div className="flex items-center gap-2">
-              <button className="px-3 py-1.5 rounded-lg bg-brand-primary text-white text-[13px] font-medium">All Fines</button>
-              <button className="px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-50 text-[13px] font-medium transition-colors">Paid Fines</button>
-              <button className="px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-50 text-[13px] font-medium transition-colors">Owed Fines</button>
+              <FilterButton label="All Fines" active={fineFilter === 'all'} onClick={() => setFineFilter('all')} />
+              <FilterButton label="Paid Fines" active={fineFilter === 'paid'} onClick={() => setFineFilter('paid')} />
+              <FilterButton label="Owed Fines" active={fineFilter === 'owed'} onClick={() => setFineFilter('owed')} />
             </div>
           </div>
           <div className="flex-1 overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left text-[12px] min-w-[500px]">
-              <thead className="bg-[#F8F6FA]">
+            <table className="reference-table-compact min-w-[640px]">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Fine ID</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Book Title</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Fine Type</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Date Accrued</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Amount</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Amount Owed</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Actions</th>
+                  <th>Fine ID</th>
+                  <th>Fine Type</th>
+                  <th>Date Accrued</th>
+                  <th>Amount</th>
+                  <th>Amount Owed</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
-                {fineHistory.length > 0 ? fineHistory.map((record) => {
-                  const relatedBook = borrowHistory.find((entry) => entry.bookId === record.bookId);
-
-                  return (
-                    <tr key={record.id} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-3.5 text-gray-800 font-medium">{record.id}</td>
-                      <td className="px-4 py-3.5 text-gray-800">{relatedBook?.bookTitle ?? 'Library Book'}</td>
-                      <td className="px-4 py-3.5 text-gray-800">{record.type}</td>
-                      <td className="px-4 py-3.5 text-gray-800">{record.dateAccrued}</td>
-                      <td className="px-4 py-3.5 text-gray-800 font-medium">{formatRwf(record.amountRwf)}</td>
-                      <td className="px-4 py-3.5 text-gray-800 font-medium">{formatRwf(record.amountOwedRwf)}</td>
-                      <td className="px-4 py-3.5">
-                        <button className="px-3 py-1 border border-gray-200 rounded text-brand-primary hover:bg-brand-secondary transition-colors font-medium">
-                          {record.amountOwedRwf > 0 ? 'Pay Fine' : 'Paid'}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                }) : (
+              <tbody>
+                {fineHistory.length > 0 ? fineHistory.map((record) => (
+                  <tr key={record.id}>
+                    <td className="font-medium">{record.id}</td>
+                    <td>{record.type}</td>
+                    <td>{record.dateAccrued || '-'}</td>
+                    <td className="font-medium">{formatRwf(record.amountRwf)}</td>
+                    <td className="font-medium">{formatRwf(record.amountOwedRwf)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => handlePayFine(record.id)}
+                        disabled={record.amountOwedRwf <= 0}
+                        className="rounded border border-gray-200 px-3 py-1 font-medium text-brand-primary transition-colors hover:bg-brand-secondary disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {record.amountOwedRwf > 0 ? 'Pay Fine' : 'Paid'}
+                      </button>
+                    </td>
+                  </tr>
+                )) : (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">
+                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
                       No fine records for this borrower.
                     </td>
                   </tr>
@@ -276,70 +340,61 @@ export function UserProfile() {
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-center gap-1 py-4 text-[12px] mt-auto border-t border-gray-50">
-            <button className="p-1 text-gray-400 hover:bg-gray-50 rounded"><ChevronLeft className="w-3 h-3" /></button>
-            <button className="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-gray-50">1</button>
-            <button className="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-gray-50">2</button>
-            <button className="w-5 h-5 flex items-center justify-center rounded bg-brand-primary text-white font-medium">3</button>
-            <span className="w-5 h-5 flex items-center justify-center text-gray-400"><MoreHorizontal className="w-3 h-3" /></span>
-            <button className="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-gray-50">100</button>
-            <button className="p-1 text-gray-400 hover:bg-gray-50 rounded"><ChevronRight className="w-3 h-3" /></button>
-          </div>
-        </div>
+        </section>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden h-[340px]">
-          <div className="px-6 pt-5 pb-4">
-            <h3 className="text-[17px] font-bold text-gray-900 mb-4">Borrow History</h3>
+        <section className="reference-card flex h-[340px] flex-col overflow-hidden">
+          <div className="px-6 pb-4 pt-5">
+            <h3 className="mb-4 text-[17px] font-bold text-gray-900">Borrow History</h3>
             <div className="flex items-center gap-2">
-              <button className="px-3 py-1.5 rounded-lg bg-brand-primary text-white text-[13px] font-medium">Lifetime History</button>
-              <button className="px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-50 text-[13px] font-medium transition-colors">Last 12 Months</button>
-              <button className="px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-50 text-[13px] font-medium transition-colors">Completed Loans</button>
+              <FilterButton label="Lifetime History" active={historyFilter === 'all'} onClick={() => setHistoryFilter('all')} />
+              <FilterButton label="Borrowed" active={historyFilter === 'borrowed'} onClick={() => setHistoryFilter('borrowed')} />
+              <FilterButton label="Returned" active={historyFilter === 'returned'} onClick={() => setHistoryFilter('returned')} />
             </div>
           </div>
           <div className="flex-1 overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left text-[12px] min-w-[500px]">
-              <thead className="bg-[#F8F6FA]">
+            <table className="reference-table-compact min-w-[760px]">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Copy ID</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Book Title</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Subject</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Loan Date</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Due Date</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800">Status</th>
-                  <th className="px-4 py-3 font-semibold text-gray-800 text-right">Total Fines</th>
+                  <th>Copy ID</th>
+                  <th>Book Title</th>
+                  <th>Subject</th>
+                  <th>Loan Date</th>
+                  <th>Due Date</th>
+                  <th>Status</th>
+                  <th className="text-right">Total Fines</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody>
                 {borrowHistory.length > 0 ? borrowHistory.map((entry) => {
                   const statusLabel = entry.status === 'Returned'
-                    ? entry.fineRwf > 0 ? 'Returned (Late)' : 'Returned'
+                    ? entry.fineRwf > 0 ? 'Returned (Overdue)' : 'Returned (On-Time)'
                     : 'Borrowed';
                   const statusClass = entry.status === 'Borrowed'
                     ? 'bg-green-200/60 text-green-700'
                     : entry.fineRwf > 0
                       ? 'bg-red-200/60 text-red-700'
-                      : 'bg-slate-200/60 text-slate-700';
+                      : 'bg-green-200/60 text-green-700';
 
                   return (
-                    <tr key={entry.id} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-2 text-gray-800 font-medium">{entry.copyId}</td>
-                      <td className="px-4 py-2">
+                    <tr key={entry.id}>
+                      <td className="font-medium">{entry.copyId}</td>
+                      <td>
                         <div className="flex items-center gap-2">
-                          <img src={entry.bookCover} alt={entry.bookTitle} className="w-5 h-5 rounded-full object-cover" referrerPolicy="no-referrer" />
+                          <div className="flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+                            <BookCoverArtwork src={entry.bookCover} alt={entry.bookTitle} compact />
+                          </div>
                           <span className="font-semibold text-gray-800">{entry.bookTitle}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-2 text-gray-800">{entry.subject}</td>
-                      <td className="px-4 py-2 text-gray-800 whitespace-nowrap">{entry.loanDate}</td>
-                      <td className="px-4 py-2 text-gray-800 whitespace-nowrap">{entry.dueDate}</td>
-                      <td className="px-4 py-2">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${statusClass}`}>
+                      <td>{entry.subject}</td>
+                      <td className="whitespace-nowrap">{entry.loanDate || '-'}</td>
+                      <td className="whitespace-nowrap">{entry.dueDate || '-'}</td>
+                      <td>
+                        <span className={`rounded px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${statusClass}`}>
                           {statusLabel}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-gray-800 font-medium text-right">
-                        {entry.fineRwf ? formatRwf(entry.fineRwf) : 'None'}
-                      </td>
+                      <td className="text-right font-medium">{entry.fineRwf ? formatRwf(entry.fineRwf) : ''}</td>
                     </tr>
                   );
                 }) : (
@@ -352,17 +407,46 @@ export function UserProfile() {
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-center gap-1 py-4 text-[12px] mt-auto border-t border-gray-50">
-            <button className="p-1 text-gray-400 hover:bg-gray-50 rounded"><ChevronLeft className="w-3 h-3" /></button>
-            <button className="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-gray-50">1</button>
-            <button className="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-gray-50">2</button>
-            <button className="w-5 h-5 flex items-center justify-center rounded bg-brand-primary text-white font-medium">3</button>
-            <span className="w-5 h-5 flex items-center justify-center text-gray-400"><MoreHorizontal className="w-3 h-3" /></span>
-            <button className="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:bg-gray-50">100</button>
-            <button className="p-1 text-gray-400 hover:bg-gray-50 rounded"><ChevronRight className="w-3 h-3" /></button>
-          </div>
-        </div>
+        </section>
       </div>
     </div>
+  );
+}
+
+function ProfileStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="mb-1 text-[13px] font-medium text-gray-500">{label}</p>
+      <p className="text-base font-bold text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function SummaryMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="mb-1 text-[11px] font-medium leading-tight text-gray-500">{label}:</p>
+      <p className="text-xl font-bold text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function FilterButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${active ? 'bg-brand-primary text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+    >
+      {label}
+    </button>
   );
 }

@@ -1,15 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { Search, ChevronDown, Trash2, Edit3, Plus, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, Edit3, Plus, Search, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { InitialAvatar } from '../components/ui/InitialAvatar';
+import { PageLoader } from '../components/ui/PageLoader';
 import type { SeedUser } from '../lib/seed';
 import { api } from '../lib/api';
+import { useNotifications } from '../lib/notifications';
+import { useToast } from '../lib/toast';
+
+const PAGE_SIZE = 8;
 
 export function Users() {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { refresh } = useNotifications();
   const [users, setUsers] = useState<SeedUser[]>([]);
   const [recordToDelete, setRecordToDelete] = useState<SeedUser | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -22,24 +31,47 @@ export function Users() {
       })
       .catch((reason: unknown) => {
         if (active) {
-          setError(reason instanceof Error ? reason.message : 'Unable to load users.');
+          toast.error(reason instanceof Error ? reason.message : 'Unable to load users.');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
         }
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [toast]);
 
-  const toggleSelect = (id: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setUsers((current) => current.map((user) => user.id === id ? { ...user, selected: !user.selected } : user));
-  };
+  const filteredUsers = useMemo(() => users.filter((user) => {
+    const query = searchTerm.trim().toLowerCase();
 
-  const handleDeleteClick = (record: SeedUser, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setRecordToDelete(record);
-  };
+    if (!query) {
+      return true;
+    }
+
+    return [
+      user.name,
+      user.roll,
+      user.studentId,
+      user.className,
+      user.primaryEmail,
+      user.primaryPhone,
+    ].some((value) => value.toLowerCase().includes(query));
+  }), [searchTerm, users]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const visibleUsers = filteredUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   const confirmDelete = async () => {
     if (!recordToDelete) {
@@ -50,113 +82,129 @@ export function Users() {
       await api.deleteUser(recordToDelete.id);
       setUsers((current) => current.filter((user) => user.id !== recordToDelete.id));
       setRecordToDelete(null);
-      setError(null);
+      await refresh();
+      toast.success('Borrower deleted.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to delete that user.');
+      toast.error(reason instanceof Error ? reason.message : 'Unable to delete that user.');
     }
   };
 
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex justify-between items-end mb-2">
+    <div className="page-shell">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-2">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Users List</h1>
-          <p className="text-gray-500 text-sm">Home <span className="mx-1">/</span> <span className="font-medium text-gray-700">Users</span></p>
-          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+          <h1 className="mb-0.5 text-[1.4rem] font-bold text-gray-900">Users List</h1>
+          <p className="text-[13px] text-gray-500">Home / Users</p>
         </div>
         <button
+          type="button"
           onClick={() => navigate('/users/new')}
-          className="bg-white border text-brand-primary border-brand-primary font-medium px-4 py-2.5 rounded-lg flex items-center gap-2 hover:bg-brand-secondary transition-colors"
+          className="reference-outline-button !rounded-xl !border-[#d2bbef] !text-[#7c2fd0] hover:!bg-[#fcfaff] px-4 py-2 text-[14px]"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="h-4 w-4" />
           Add User
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100/50 overflow-hidden">
-        <div className="p-6 pb-4 flex flex-col sm:flex-row justify-between items-center gap-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Users Information</h2>
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-64">
-              <input
+      <div className="showcase-table-card p-5">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-2">
+          <div>
+            <h2 className="text-[1.05rem] font-bold text-gray-900">Users Information</h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="showcase-input min-w-[280px] px-3 h-[42px] bg-white border-gray-100 shadow-sm rounded-lg">
+               <input
                 type="text"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search by name or roll"
-                className="w-full bg-gray-50/80 border border-gray-100 rounded-lg py-2 px-4 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all placeholder:text-gray-400"
+                className="text-[13px] bg-transparent"
               />
-              <span className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-brand-primary">
-                <Search className="w-4 h-4 opacity-70" />
-              </span>
-            </div>
-            <button className="flex items-center gap-2 border border-gray-100 text-gray-600 bg-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap">
-              Last 30 days
-              <ChevronDown className="w-4 h-4" />
+              <Search className="showcase-input-icon h-[18px] w-[18px] text-gray-400" />
+            </label>
+            <button type="button" className="reference-filter-button h-[42px] flex items-center justify-between gap-2 px-3 min-w-[120px] rounded-lg border-gray-100 shadow-sm">
+              <span className="text-[13px] text-gray-600">Last 30 days</span>
+              <svg className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
             </button>
           </div>
         </div>
 
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+          <table className="showcase-table min-w-[860px]">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm w-12">
-                  <div className="w-5 h-5 border-2 rounded border-gray-300"></div>
+              <tr className="bg-white border-b border-gray-50">
+                <th className="font-semibold text-gray-700 bg-white">
+                   <label className="flex items-center cursor-pointer">
+                     <input type="checkbox" className="rounded border-gray-300 text-[#7c2fd0] focus:ring-[#7c2fd0]" disabled />
+                   </label>
                 </th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">User Name</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Roll</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Address</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Class</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Date of Birth</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Phone</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm text-center">Action</th>
+                <th className="font-semibold text-gray-700 bg-white">User Name</th>
+                <th className="font-semibold text-gray-700 bg-white">Roll</th>
+                <th className="font-semibold text-gray-700 bg-white">Student ID</th>
+                <th className="font-semibold text-gray-700 bg-white">Class</th>
+                <th className="font-semibold text-gray-700 bg-white">Email</th>
+                <th className="font-semibold text-gray-700 bg-white">Phone</th>
+                <th className="text-center font-semibold text-gray-700 bg-white">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {users.length > 0 ? users.map((student) => (
-                <tr 
-                  key={student.id} 
+              {visibleUsers.length > 0 ? visibleUsers.map((student, idx) => (
+                <tr
+                  key={student.id}
                   onClick={() => navigate(`/users/${student.id}/profile`)}
-                  className={`hover:bg-gray-50/50 transition-colors cursor-pointer ${student.selected ? 'bg-brand-primary/5' : ''}`}
+                  className={`cursor-pointer transition hover:bg-[#fcfaff] ${idx === 2 ? 'is-selected' : ''}`}
                 >
-                  <td className="px-6 py-4">
-                    <div 
-                      className={`w-5 h-5 border-2 rounded flex items-center justify-center cursor-pointer transition-colors ${student.selected ? 'border-brand-primary bg-brand-primary' : 'border-gray-300'}`}
-                      onClick={(e) => toggleSelect(student.id, e)}
-                    >
-                      {student.selected && <CheckIcon className="w-3.5 h-3.5 text-white" />}
-                    </div>
+                  <td className="w-12">
+                    <label className="flex items-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                       <input type="checkbox" className="rounded border-gray-300 text-[#7c2fd0] focus:ring-[#7c2fd0]" defaultChecked={idx === 2} />
+                    </label>
                   </td>
-                  <td className="px-6 py-4">
+                  <td>
                     <div className="flex items-center gap-3">
-                      <InitialAvatar name={student.name} className="w-8 h-8 text-xs" />
-                      <span className="font-semibold text-gray-800 text-sm">{student.name}</span>
+                      <InitialAvatar name={student.name} className="h-[30px] w-[30px] text-[11px]" />
+                      <span className="font-medium text-gray-900">{student.name}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 font-medium">{student.roll}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{student.address}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600 font-medium">{student.className}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{student.dob}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{student.primaryPhone}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-center gap-2">
-                      <button 
-                        onClick={(e) => handleDeleteClick(student, e)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-md hover:bg-red-50"
+                  <td className="text-gray-500">{student.roll}</td>
+                  <td className="text-gray-500">{student.studentId}</td>
+                  <td className="text-gray-500">{student.className}</td>
+                  <td className="text-gray-500">{student.primaryEmail || '-'}</td>
+                  <td className="text-gray-500">{student.primaryPhone || '-'}</td>
+                  <td>
+                    <div className="flex items-center justify-center gap-3 text-gray-400">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setRecordToDelete(student);
+                        }}
+                        className="p-1 hover:text-gray-600 transition"
+                        aria-label={`Delete ${student.name}`}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); navigate(`/users/${student.id}/details`); }}
-                        className="p-1.5 text-gray-400 hover:text-brand-primary transition-colors rounded-md hover:bg-brand-secondary"
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/users/${student.id}/details`);
+                        }}
+                        className="p-1 hover:text-gray-600 transition"
+                        aria-label={`Edit ${student.name}`}
                       >
-                        <Edit3 className="w-4 h-4" />
+                        <Edit3 className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
-                    No borrowers yet. Create the first user to start managing the library.
+                  <td colSpan={7} className="px-6 py-14 text-center text-sm text-gray-500">
+                    No borrowers match your current search.
                   </td>
                 </tr>
               )}
@@ -164,70 +212,100 @@ export function Users() {
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="p-6 border-t border-gray-100 flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-1 mx-auto text-sm">
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50"><ChevronLeft className="w-4 h-4" /></button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-brand-primary bg-brand-primary text-white font-medium">1</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-50 font-medium">2</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-50 font-medium">3</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-50 font-medium">4</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-50 font-medium">5</button>
-            <span className="w-8 h-8 flex items-center justify-center text-gray-400"><MoreHorizontal className="w-4 h-4" /></span>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-50 font-medium">100</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50"><ChevronRight className="w-4 h-4" /></button>
+        <div className="mt-5 flex flex-col items-center justify-between gap-4 pt-4 text-sm text-[#6f647d] sm:flex-row px-2 pb-2">
+          <div className="flex-1"></div>
+          
+           <div className="showcase-pagination flex-1 justify-center">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+              className="showcase-page-button hover:bg-transparent"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="mx-auto h-4 w-4 text-gray-400" />
+            </button>
+            {getVisiblePages(page, totalPages).map((item, index) => item === 'ellipsis' ? (
+              <span key={`ellipsis-${index}`} className="px-1 text-base">…</span>
+            ) : (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setPage(item)}
+                className={`showcase-page-button !h-7 !min-w-7 ${item === page ? '!bg-[#7c2fd0] !text-white !rounded-md !shadow-none' : 'hover:!bg-gray-50'}`}
+              >
+                {item}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page === totalPages}
+              className="showcase-page-button hover:bg-transparent"
+              aria-label="Next page"
+            >
+              <ChevronRight className="mx-auto h-4 w-4 text-gray-400" />
+            </button>
           </div>
-          <div className="flex items-center gap-2 mx-auto sm:mx-0">
-             <button className="flex items-center gap-2 border border-gray-100 text-gray-600 bg-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-              10 / page
-              <ChevronDown className="w-4 h-4" />
+
+          <div className="flex items-center justify-end flex-1 gap-3 text-[13px]">
+            <button type="button" className="reference-filter-button h-[36px] flex items-center justify-between gap-2 px-3 min-w-[90px] rounded-lg border border-gray-100 shadow-sm bg-white">
+              <span className="text-[13px] text-gray-600">{PAGE_SIZE} / page</span>
+              <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {recordToDelete && (
-        <div className="fixed inset-0 z-50 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[440px] overflow-hidden">
-            <div className="p-5 border-b border-gray-100 flex items-center gap-3 bg-gray-50/50">
-              <Trash2 className="w-5 h-5 text-brand-primary" />
+      {recordToDelete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+          <div className="reference-modal">
+            <div className="reference-modal-header">
+              <Trash2 className="h-5 w-5 text-brand-primary" />
               <h3 className="text-[17px] font-bold text-gray-900">Confirm Deletion</h3>
             </div>
-            
-            <div className="p-6">
-              <p className="text-[15px] text-gray-800 leading-relaxed mb-6">
-                Are you sure you want to delete the user record for 
-                '{recordToDelete.name}' (Class {recordToDelete.className})? 
-                This action cannot be undone.
+
+            <div className="reference-modal-body">
+              <p className="text-[15px] leading-relaxed text-gray-800">
+                Are you sure you want to delete the borrower record for &apos;{recordToDelete.name}&apos; ({recordToDelete.className})? This action cannot be undone.
               </p>
             </div>
-            
-            <div className="p-5 border-t border-gray-100 flex gap-4">
-              <button 
+
+            <div className="reference-modal-actions">
+              <button
+                type="button"
                 onClick={() => setRecordToDelete(null)}
-                className="flex-1 px-6 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                className="flex-1 rounded-lg bg-gray-200 px-6 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-300"
               >
                 Cancel
               </button>
-              <button 
+              <button
+                type="button"
                 onClick={confirmDelete}
-                className="flex-1 px-6 py-2.5 bg-brand-primary text-white font-medium rounded-lg hover:bg-brand-hover transition-colors shadow-sm shadow-brand-primary/20"
+                className="reference-primary-button flex-1 justify-center px-6"
               >
                 Yes, Delete
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
-function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
+function getVisiblePages(currentPage: number, totalPages: number) {
+  if (totalPages <= 6) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  if (currentPage <= 3) {
+    return [1, 2, 3, 4, 'ellipsis', totalPages] as const;
+  }
+
+  if (currentPage >= totalPages - 2) {
+    return [1, 'ellipsis', totalPages - 3, totalPages - 2, totalPages - 1, totalPages] as const;
+  }
+
+  return [1, 'ellipsis', currentPage - 1, currentPage, currentPage + 1, 'ellipsis', totalPages] as const;
 }

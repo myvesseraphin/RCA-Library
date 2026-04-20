@@ -1,15 +1,20 @@
 import React from 'react';
-import { Search, Bell, MessageSquare, LogOut } from 'lucide-react';
+import { Search, Bell, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { InitialAvatar } from '../ui/InitialAvatar';
 import { useAuth } from '../../lib/auth';
+import { useNotifications } from '../../lib/notifications';
+import { useToast } from '../../lib/toast';
 
 export function Header() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
+  const toast = useToast();
 
   const handleLogout = async () => {
     await logout();
+    toast.info('You have been signed out.');
     navigate('/login', { replace: true });
   };
 
@@ -27,12 +32,18 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-6 ml-4">
-        <button className="text-gray-500 hover:text-brand-primary transition-colors relative">
+        <button
+          type="button"
+          onClick={() => navigate('/notifications')}
+          className="text-gray-500 hover:text-brand-primary transition-colors relative"
+          aria-label="Open notifications"
+        >
           <Bell className="w-5 h-5" />
-          <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full translate-x-0.5 -translate-y-0.5 border-2 border-white"></span>
-        </button>
-        <button className="text-gray-500 hover:text-brand-primary transition-colors">
-          <MessageSquare className="w-5 h-5" />
+          {unreadCount > 0 ? (
+            <span className="absolute -right-2 -top-2 min-w-5 rounded-full bg-brand-primary px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          ) : null}
         </button>
 
         <div className="flex items-center gap-3 px-2.5 py-1.5 rounded-full transition-colors">

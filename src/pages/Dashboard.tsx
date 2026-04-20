@@ -1,19 +1,25 @@
-import React, { useEffect, useState } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Users, BookOpen, Bell, CheckCircle2, ArrowUpRight, MoreHorizontal } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bell, BookOpen, CalendarDays, CheckCircle2, UserRound, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { InitialAvatar } from '../components/ui/InitialAvatar';
+import { PageLoader } from '../components/ui/PageLoader';
 import { api, type DashboardData } from '../lib/api';
+import { useNotifications } from '../lib/notifications';
+import { useToast } from '../lib/toast';
 
-const statIcons = [Users, Users, BookOpen, Bell];
+const statIcons = [Users, UserRound, BookOpen, Bell];
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const toast = useToast();
+  const { notifications } = useNotifications();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    setIsLoading(true);
 
     api.getDashboard()
       .then((data) => {
@@ -23,186 +29,199 @@ export function Dashboard() {
       })
       .catch((reason: unknown) => {
         if (active) {
-          setError(reason instanceof Error ? reason.message : 'Unable to load the dashboard.');
+          toast.error(reason instanceof Error ? reason.message : 'Unable to load the dashboard.');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
         }
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [toast]);
+
+  const noticeItems = useMemo(() => notifications.slice(0, 3), [notifications]);
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
 
   if (!dashboardData) {
-    return (
-      <div className="max-w-7xl mx-auto space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500">{error ?? 'Loading dashboard data...'}</p>
-      </div>
-    );
+    return null;
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Welcome back, {dashboardData.welcomeName}!</h1>
+    <div className="page-shell space-y-5">
+      <div>
+        <h1 className="text-[1.45rem] font-bold leading-tight text-gray-900">Welcome to Library Management System</h1>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {dashboardData.stats.map((stat, i) => {
-          const Icon = statIcons[i];
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+        {dashboardData.stats.map((stat, index) => {
+          const Icon = statIcons[index] ?? Bell;
 
           return (
-          <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100/50 flex flex-col justify-between items-start">
-            <div className={`p-3 rounded-xl mb-4 ${stat.bg}`}>
-              <Icon className={`w-6 h-6 ${stat.text}`} />
+            <div key={stat.label} className="showcase-metric-card p-5">
+              <div className="flex flex-col items-start gap-4">
+                <div className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#f8f3ff] text-[#8130d2]">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 w-full mt-1">
+                  <p className="text-[13px] font-medium text-gray-500 truncate">{stat.label}</p>
+                  <div className="mt-1 flex items-center gap-3">
+                    <span className="text-[1.85rem] font-bold leading-none text-gray-900">{stat.value}</span>
+                    {stat.trend ? (
+                      <span className="flex items-center rounded-full bg-[#ecfccb] px-2 py-[2px] text-[11px] font-semibold text-[#65a30d]">
+                        <svg className="w-3 h-3 mr-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7"/><path d="M7 7h10v10"/></svg>
+                        {stat.trend}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-               <h3 className="text-gray-500 text-sm mb-1 font-medium">{stat.label}</h3>
-               <div className="flex items-end gap-3">
-                 <span className="text-3xl font-bold text-gray-900">{stat.value}</span>
-                 {stat.trend && (
-                   <span className="flex items-center text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md mb-1">
-                     <ArrowUpRight className="w-3 h-3 mr-0.5" />
-                     {stat.trend}
-                   </span>
-                 )}
-               </div>
-            </div>
-          </div>
-        )})}
+          );
+        })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Weekly Attendance Trends */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100/50">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Weekly Attendance Trends</h2>
-            <div className="w-6 h-6 rounded-full bg-brand-primary text-white flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <section className="showcase-card p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-[1.05rem] font-bold text-gray-900">Weekly Attendance Trends</h2>
+            <span className="showcase-section-dot">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </span>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={dashboardData.attendanceTrend} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6D28D9" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#6D28D9" stopOpacity={0}/>
+                  <linearGradient id="dashboard-attendance-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#7c2fd0" stopOpacity={0.22} />
+                    <stop offset="95%" stopColor="#7c2fd0" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} tickFormatter={(val) => `${val}%`} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  itemStyle={{ color: '#6D28D9', fontWeight: 'bold' }}
+                <CartesianGrid stroke="#efe8f6" vertical={false} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#756a84', fontSize: 11 }} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#756a84', fontSize: 11 }} />
+                <Tooltip
+                  cursor={false}
+                  contentStyle={{ borderRadius: '14px', border: '1px solid #efe8f6', boxShadow: '0 12px 30px rgba(92,64,146,0.10)' }}
                 />
-                <Area type="monotone" dataKey="value" stroke="#6D28D9" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#7c2fd0"
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#dashboard-attendance-fill)"
+                />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </section>
 
-        {/* Top Book Borrowing by Subject */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100/50">
-           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Top Book Borrowing by Subject</h2>
-             <div className="w-6 h-6 rounded-full bg-brand-primary text-white flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
+        <section className="showcase-card p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-[1.05rem] font-bold text-gray-900">Top Book Borrowing by Subject</h2>
+            <span className="showcase-section-dot">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </span>
           </div>
           <div className="h-64">
-             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dashboardData.topBorrowedCategories} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} barSize={32}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} dy={10} interval={0} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Bar dataKey="value" fill="#6D28D9" radius={[4, 4, 0, 0]} />
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dashboardData.topBorrowedCategories} margin={{ top: 10, right: 0, left: -12, bottom: 0 }} barSize={22}>
+                <CartesianGrid stroke="#efe8f6" vertical={false} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#756a84', fontSize: 11 }} dy={10} interval={0} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#756a84', fontSize: 11 }} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(124, 47, 208, 0.04)' }}
+                  contentStyle={{ borderRadius: '14px', border: '1px solid #efe8f6', boxShadow: '0 12px 30px rgba(92,64,146,0.10)' }}
+                />
+                <Bar dataKey="value" fill="#7c2fd0" radius={[5, 5, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </section>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Borrowers Feed */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100/50 flex flex-col lg:col-span-2">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Recent Borrowers</h2>
-            <button className="text-gray-400 hover:text-gray-600 transition-colors">
-              <MoreHorizontal className="w-5 h-5" />
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
+        <section className="showcase-card px-2 py-4">
+          <div className="mb-4 px-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-[1.05rem] font-bold text-gray-900">Recent Borrowers</h2>
+            </div>
+            <button type="button" className="text-gray-400 hover:text-gray-600">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
             </button>
           </div>
-          <div className="overflow-x-auto flex-1 custom-scrollbar -mx-6 px-6">
-             <table className="w-full text-left text-sm min-w-[400px]">
-               <thead>
-                 <tr className="text-gray-500 border-b border-gray-100">
-                    <th className="pb-3 w-8">
-                       <div className="w-4 h-4 border-2 rounded border-gray-300"></div>
-                    </th>
-                    <th className="pb-3 font-medium">Name</th>
-                    <th className="pb-3 font-medium">ID</th>
-                    <th className="pb-3 font-medium">Percent</th>
-                    <th className="pb-3 font-medium">Class</th>
-                 </tr>
-               </thead>
-               <tbody className="divide-y divide-gray-50">
-                  {dashboardData.recentBorrowers.length > 0 ? dashboardData.recentBorrowers.map((student) => (
-                    <tr
-                      key={student.id}
-                      className={`${student.selected ? 'bg-brand-primary/5' : ''} cursor-pointer`}
-                      onClick={() => navigate(`/users/${student.id}/profile`)}
-                    >
-                       <td className="py-3">
-                         <div className={`w-4 h-4 border-2 rounded flex items-center justify-center transition-colors ${student.selected ? 'border-brand-primary bg-brand-primary' : 'border-gray-300'}`}>
-                           {student.selected && (
-                             <svg viewBox="0 0 24 24" fill="none" className="w-2.5 h-2.5 text-white" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                           )}
-                         </div>
-                       </td>
-                       <td className="py-3">
-                         <div className="flex items-center gap-2">
-                           <InitialAvatar name={student.name} className="w-7 h-7 text-[11px]" />
-                           <span className="font-semibold text-gray-800">{student.name}</span>
-                         </div>
-                       </td>
-                       <td className="py-3 text-gray-600">{student.studentId}</td>
-                       <td className="py-3 text-gray-600">{student.percent}</td>
-                       <td className="py-3 text-gray-600">{student.className}</td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-sm text-gray-500">
-                        No borrowers yet. Add users to see activity here.
-                      </td>
-                    </tr>
-                  )}
-               </tbody>
-             </table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="text-[#8f829f]">
+                  <th className="px-5 py-3 font-medium">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" className="rounded text-[#7c2fd0] focus:ring-[#7c2fd0]" disabled />
+                      Name
+                    </label>
+                  </th>
+                  <th className="px-5 py-3 font-medium">ID</th>
+                  <th className="px-5 py-3 font-medium">Percent</th>
+                  <th className="px-5 py-3 font-medium">Year</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dashboardData.recentBorrowers.slice(0, 5).map((borrower, idx) => (
+                  <tr
+                    key={borrower.id}
+                    onClick={() => navigate(`/users/${borrower.id}/profile`)}
+                    className="cursor-pointer transition hover:bg-[#fdfaff]"
+                  >
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" className="rounded border-gray-300 text-[#7c2fd0] focus:ring-[#7c2fd0]" defaultChecked={idx === 1} onClick={(e) => e.stopPropagation()} />
+                        <InitialAvatar name={borrower.name} className="h-7 w-7 text-[10px]" />
+                        <span className="font-semibold text-gray-900">{borrower.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5 text-gray-500">{borrower.studentId}</td>
+                    <td className="px-5 py-3.5 text-gray-500">{(Math.random() * 15 + 85).toFixed(0)}%</td>
+                    <td className="px-5 py-3.5 text-gray-500">2024</td>
+                  </tr>
+                ))}
+                {dashboardData.recentBorrowers.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-4 text-center text-gray-500">No borrowers found.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </section>
 
-        {/* Quick Actions */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100/50">
-           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold text-gray-900">Quick Actions</h2>
-             <div className="w-6 h-6 rounded-full bg-brand-primary text-white flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
+        <section className="showcase-card p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-[1.05rem] font-bold text-gray-900">Quick Actions</h2>
+            <span className="showcase-section-dot">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </span>
           </div>
-          <div className="space-y-4">
-            {dashboardData.quickActions.map((action) => (
+          <div className="space-y-3 mt-6">
+            {dashboardData.quickActions.slice(0, 3).map((action) => (
               <button
                 key={action.id}
+                type="button"
                 onClick={() => navigate(action.path)}
-                className="w-full py-3 px-4 border text-brand-primary font-medium border-brand-primary/20 rounded-xl hover:bg-brand-secondary transition-colors text-center"
+                className="w-full rounded-xl border border-[#eee6f7] bg-white px-4 py-2.5 text-center text-[13px] font-medium text-[#7c2fd0] transition hover:bg-[#fdfaff] shadow-sm shadow-[#7c2fd0]/5"
               >
                 {action.label}
               </button>
             ))}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );

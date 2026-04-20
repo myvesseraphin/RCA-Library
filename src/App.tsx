@@ -17,17 +17,18 @@ import { BookHistory } from './pages/BookHistory';
 import { BookEdit } from './pages/BookEdit';
 import { LoginPage } from './pages/LoginPage';
 import { Settings } from './pages/Settings';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { NotificationsPage } from './pages/NotificationsPage';
 import { AuthProvider, useAuth } from './lib/auth';
+import { PageLoader } from './components/ui/PageLoader';
+import { ToastProvider } from './lib/toast';
+import { NotificationsProvider } from './lib/notifications';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isLoading, user } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center text-sm text-brand-muted">
-        Loading workspace...
-      </div>
-    );
+    return <PageLoader fullScreen />;
   }
 
   if (!user) {
@@ -40,35 +41,41 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/login" element={<LoginPage />} />
+      <ToastProvider>
+        <NotificationsProvider>
+          <Router>
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
-          <Route
-            element={(
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            )}
-          >
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="users" element={<Users />} />
-            <Route path="users/new" element={<UserDetails />} />
-            <Route path="users/:id/details" element={<UserDetails />} />
-            <Route path="users/:id/profile" element={<UserProfile />} />
-            <Route path="library" element={<Library />} />
-            <Route path="library/new/edit" element={<BookEdit />} />
-            <Route path="library/:id/details" element={<BookDetails />} />
-            <Route path="library/:id/history" element={<BookHistory />} />
-            <Route path="library/:id/edit" element={<BookEdit />} />
-            <Route path="borrowing" element={<Borrowing />} />
-            <Route path="settings" element={<Settings />} />
-          </Route>
+              <Route
+                element={(
+                  <ProtectedRoute>
+                    <AppLayout />
+                  </ProtectedRoute>
+                )}
+              >
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="users" element={<Users />} />
+                <Route path="users/new" element={<UserDetails />} />
+                <Route path="users/:id/details" element={<UserDetails />} />
+                <Route path="users/:id/profile" element={<UserProfile />} />
+                <Route path="library" element={<Library />} />
+                <Route path="library/new/edit" element={<BookEdit />} />
+                <Route path="library/:id/details" element={<BookDetails />} />
+                <Route path="library/:id/history" element={<BookHistory />} />
+                <Route path="library/:id/edit" element={<BookEdit />} />
+                <Route path="borrowing" element={<Borrowing />} />
+                <Route path="notifications" element={<NotificationsPage />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
 
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </Router>
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Router>
+        </NotificationsProvider>
+      </ToastProvider>
     </AuthProvider>
   );
 }

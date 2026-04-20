@@ -3,13 +3,15 @@ import { Link, useNavigate } from 'react-router-dom';
 import { KeyRound, User } from 'lucide-react';
 import { BrandLogo } from '../components/ui/BrandLogo';
 import { useAuth } from '../lib/auth';
+import { Spinner } from '../components/ui/Spinner';
+import { useToast } from '../lib/toast';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const { login, user } = useAuth();
+  const toast = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -23,11 +25,11 @@ export function LoginPage() {
 
     try {
       setIsSubmitting(true);
-      setError(null);
       await login(email, password);
+      toast.success('Welcome back to your library workspace.');
       navigate('/dashboard', { replace: true });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to sign in.');
+      toast.error(reason instanceof Error ? reason.message : 'Unable to sign in.', 'Sign in failed');
     } finally {
       setIsSubmitting(false);
     }
@@ -41,7 +43,8 @@ export function LoginPage() {
             <Link to="/" className="inline-flex">
               <BrandLogo
                 imageClassName="h-14"
-                titleClassName="text-[2rem] font-extrabold uppercase tracking-[0.08em] leading-none text-brand-text"
+                title="library"
+                titleClassName="text-[1.85rem] font-black lowercase tracking-[0.02em] leading-none text-brand-text"
                 subtitleClassName="mt-1 text-[0.64rem] font-semibold uppercase tracking-[0.24em] text-brand-muted"
               />
             </Link>
@@ -49,13 +52,7 @@ export function LoginPage() {
             <div className="mt-14">
               <h1 className="text-[2rem] font-bold tracking-[-0.03em] text-brand-text">Login to your account</h1>
 
-              <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
-                {error && (
-                  <p className="rounded-[10px] border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
-                    {error}
-                  </p>
-                )}
-
+              <form className="mt-7 space-y-5" onSubmit={handleSubmit} autoComplete="off">
                 <label className="relative block">
                   <span className="sr-only">Username or Email</span>
                   <span className="pointer-events-none absolute left-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md bg-brand-secondary text-brand-primary/60">
@@ -66,7 +63,7 @@ export function LoginPage() {
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder="Username or Email"
-                    autoComplete="email"
+                    autoComplete="off"
                     className="h-14 w-full rounded-[10px] border border-brand-secondary bg-white pl-14 pr-4 text-[0.95rem] text-brand-text shadow-[0_16px_30px_rgba(82,24,165,0.08)] outline-none transition placeholder:text-brand-muted/70 focus:border-brand-primary/30 focus:ring-4 focus:ring-brand-primary/10"
                   />
                 </label>
@@ -81,31 +78,25 @@ export function LoginPage() {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Password"
-                    autoComplete="current-password"
+                    autoComplete="off"
                     className="h-14 w-full rounded-[10px] border border-brand-secondary bg-white pl-14 pr-4 text-[0.95rem] text-brand-text shadow-[0_16px_30px_rgba(82,24,165,0.08)] outline-none transition placeholder:text-brand-muted/70 focus:border-brand-primary/30 focus:ring-4 focus:ring-brand-primary/10"
                   />
                 </label>
 
-                <button
-                  type="button"
-                  className="text-sm font-medium text-brand-text transition hover:text-brand-primary"
-                >
-                  Forget password?
-                </button>
+                <Link to="/forgot-password" className="inline-block text-sm font-medium text-brand-text transition hover:text-brand-primary">
+                  Forgot password?
+                </Link>
 
                 <div className="pt-1">
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex h-11 min-w-[126px] items-center justify-center rounded-[8px] bg-brand-primary px-7 text-sm font-semibold text-white shadow-[0_12px_20px_rgba(82,24,165,0.22)] transition hover:bg-brand-hover"
+                    className="inline-flex h-11 min-w-[126px] items-center justify-center gap-2 rounded-[8px] bg-brand-primary px-7 text-sm font-semibold text-white shadow-[0_12px_20px_rgba(82,24,165,0.22)] transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-80"
                   >
-                    {isSubmitting ? 'Signing in...' : 'Login'}
+                    {isSubmitting ? <Spinner className="h-4 w-4 border-2 border-white/30 border-t-white" /> : null}
+                    <span>{isSubmitting ? 'Signing in...' : 'Login'}</span>
                   </button>
                 </div>
-
-                <p className="text-xs leading-5 text-brand-muted">
-                  Admin account: <code>irasubizasalynelson@gmail.com</code> / <code>nelson 250!</code>
-                </p>
               </form>
             </div>
           </div>

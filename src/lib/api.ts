@@ -42,24 +42,13 @@ export type LoginResponse = {
 export type UserMutationPayload = {
   firstName: string;
   lastName: string;
-  fatherName: string;
-  motherName: string;
-  fatherOccupation: string;
-  motherOccupation: string;
-  dob: string;
-  religion: string;
   classLevel: string;
   section: string;
   roll: string;
   admissionDate: string;
   primaryPhone: string;
-  secondaryPhone: string;
   primaryEmail: string;
-  secondaryEmail: string;
   address: string;
-  streetAddress: string;
-  houseName: string;
-  houseNumber: string;
 };
 
 export type BookMutationPayload = {
@@ -120,10 +109,12 @@ export type UserProfileData = {
   borrowHistory: Array<{
     id: number;
     copyId: string;
+    borrowerId?: number | null;
     borrower: string;
     borrowerClassName?: string | null;
     roll: string;
     studentId: string;
+    borrowerEmail?: string | null;
     loanDate: string | null;
     dueDate: string | null;
     returnedDate: string | null;
@@ -147,6 +138,23 @@ export type BookDetailsData = {
 export type BookCoverUploadResponse = {
   path: string;
   publicUrl: string;
+};
+
+export type NotificationItem = {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  link: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+export type PasswordResetRequestResponse = {
+  email: string;
+  expiresInMinutes: number;
+  delivery: 'email' | 'development';
+  debugCode?: string;
 };
 
 export class UnauthorizedError extends Error {
@@ -248,6 +256,24 @@ export const api = {
       method: 'POST',
     });
   },
+  requestPasswordReset(payload: { email: string }) {
+    return request<PasswordResetRequestResponse>('/auth/password-reset/request', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  verifyPasswordResetCode(payload: { email: string; code: string }) {
+    return request<{ resetToken: string }>('/auth/password-reset/verify', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  resetPassword(payload: { resetToken: string; password: string }) {
+    return request<{ message: string }>('/auth/password-reset/complete', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
   getCurrentUser() {
     return request<AuthUser>('/auth/me');
   },
@@ -339,6 +365,29 @@ export const api = {
   deleteBorrowing(copyId: string) {
     return request<null>(`/borrowings/${copyId}`, {
       method: 'DELETE',
+    });
+  },
+  renewBorrowing(copyId: string) {
+    return request<BorrowingRecord[]>(`/borrowings/${copyId}/renew`, {
+      method: 'POST',
+    });
+  },
+  payFine(userId: number | string, fineId: string) {
+    return request<SeedFineRecord>(`/users/${userId}/fines/${fineId}/pay`, {
+      method: 'POST',
+    });
+  },
+  getNotifications() {
+    return request<NotificationItem[]>('/notifications');
+  },
+  markNotificationRead(id: number) {
+    return request<NotificationItem>(`/notifications/${id}/read`, {
+      method: 'POST',
+    });
+  },
+  markAllNotificationsRead() {
+    return request<null>('/notifications/read-all', {
+      method: 'POST',
     });
   },
 };

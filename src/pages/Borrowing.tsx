@@ -1,53 +1,89 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Search, ChevronDown, Trash2, Plus, Minus, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { useEffect, useMemo, useState, type SVGProps } from 'react';
+import { CalendarDays, ChevronLeft, ChevronRight, CornerUpLeft, Minus, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { api, type BorrowingRecord } from '../lib/api';
 import { formatFine, type SeedUser } from '../lib/seed';
 import { InitialAvatar } from '../components/ui/InitialAvatar';
+import { BookCoverArtwork } from '../components/ui/BookCoverArtwork';
+import { PageLoader } from '../components/ui/PageLoader';
+import { useNotifications } from '../lib/notifications';
+import { useToast } from '../lib/toast';
+
+const PAGE_SIZE = 10;
 
 export function Borrowing() {
+  const toast = useToast();
+  const { refresh } = useNotifications();
   const [borrowings, setBorrowings] = useState<BorrowingRecord[]>([]);
   const [users, setUsers] = useState<SeedUser[]>([]);
   const [recordToDelete, setRecordToDelete] = useState<BorrowingRecord | null>(null);
   const [isBorrowModalOpen, setIsBorrowModalOpen] = useState(false);
   const [activeBorrowIds, setActiveBorrowIds] = useState<string[]>([]);
   const [userSearchTerm, setUserSearchTerm] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    setIsLoading(true);
 
     Promise.all([api.getBorrowings(), api.getUsers()])
       .then(([borrowingItems, userItems]) => {
         if (active) {
           setBorrowings(borrowingItems);
           setUsers(userItems);
-          setError(null);
         }
       })
       .catch((reason: unknown) => {
         if (active) {
-          setError(reason instanceof Error ? reason.message : 'Unable to load circulation data.');
+          toast.error(reason instanceof Error ? reason.message : 'Unable to load circulation data.');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
         }
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [toast]);
 
   const borrowerChoices = useMemo(() => users.map((user) => ({
     id: user.id,
     label: `${user.name} (${user.className})`,
   })), [users]);
 
-  const toggleSelect = (copyId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    setBorrowings((current) => current.map((record) => record.copyId === copyId ? { ...record, selected: !record.selected } : record));
-  };
+  const filteredBorrowings = useMemo(() => borrowings.filter((record) => {
+    const query = searchTerm.trim().toLowerCase();
 
-  const handleDeleteClick = (record: BorrowingRecord, event: React.MouseEvent) => {
-    event.stopPropagation();
-    setRecordToDelete(record);
+    if (!query) {
+      return true;
+    }
+
+    return [
+      record.book.title,
+      record.borrowerLabel,
+      record.book.bookId,
+      record.status,
+      record.copyId,
+    ].some((value) => value.toLowerCase().includes(query));
+  }), [borrowings, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredBorrowings.length / PAGE_SIZE));
+  const pageItems = filteredBorrowings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
+  const toggleSelect = (copyId: string) => {
+    setBorrowings((current) => current.map((record) => record.copyId === copyId ? { ...record, selected: !record.selected } : record));
   };
 
   const confirmDelete = async () => {
@@ -59,26 +95,36 @@ export function Borrowing() {
       await api.deleteBorrowing(recordToDelete.copyId);
       setBorrowings((current) => current.filter((record) => record.copyId !== recordToDelete.copyId));
       setRecordToDelete(null);
-      setError(null);
+      await refresh();
+      toast.success('Circulation record deleted.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to delete that circulation record.');
+      toast.error(reason instanceof Error ? reason.message : 'Unable to delete that circulation record.');
     }
   };
 
-  const handleReturn = async (copyId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-
+  const handleReturn = async (copyId: string) => {
     try {
       const updatedBorrowings = await api.returnBorrowing(copyId);
       setBorrowings(updatedBorrowings);
-      setError(null);
+      await refresh();
+      toast.success('Book returned successfully.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to return that copy.');
+      toast.error(reason instanceof Error ? reason.message : 'Unable to return that copy.');
     }
   };
 
-  const openBorrowModalSingle = (copyId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
+  const handleRenew = async (copyId: string) => {
+    try {
+      const updatedBorrowings = await api.renewBorrowing(copyId);
+      setBorrowings(updatedBorrowings);
+      await refresh();
+      toast.success('Loan renewed for 14 more days.');
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : 'Unable to renew that loan.');
+    }
+  };
+
+  const openBorrowModalSingle = (copyId: string) => {
     setActiveBorrowIds([copyId]);
     setUserSearchTerm('');
     setIsBorrowModalOpen(true);
@@ -88,7 +134,7 @@ export function Borrowing() {
     const selectedIds = borrowings.filter((record) => record.selected && record.status === 'Available').map((record) => record.copyId);
 
     if (selectedIds.length === 0) {
-      setError('Select one or more available copies before borrowing.');
+      toast.info('Select one or more available copies before borrowing.');
       return;
     }
 
@@ -101,7 +147,7 @@ export function Borrowing() {
     const selectedIds = borrowings.filter((record) => record.selected && record.status !== 'Available').map((record) => record.copyId);
 
     if (selectedIds.length === 0) {
-      setError('Select one or more borrowed copies before returning.');
+      toast.info('Select one or more borrowed copies before returning.');
       return;
     }
 
@@ -113,9 +159,10 @@ export function Borrowing() {
       }
 
       setBorrowings(updatedBorrowings);
-      setError(null);
+      await refresh();
+      toast.success('Selected copies returned.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to complete the bulk return.');
+      toast.error(reason instanceof Error ? reason.message : 'Unable to complete the bulk return.');
     }
   };
 
@@ -128,138 +175,145 @@ export function Borrowing() {
 
       setBorrowings(updatedBorrowings);
       setIsBorrowModalOpen(false);
-      setError(null);
+      await refresh();
+      toast.success('Borrowing recorded successfully.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to borrow the selected copies.');
+      toast.error(reason instanceof Error ? reason.message : 'Unable to borrow the selected copies.');
     }
   };
 
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
-      <div className="flex justify-between items-end mb-2">
+    <div className="page-shell">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Library: Borrow & Return</h1>
-          <p className="text-gray-500 text-sm">Library <span className="mx-1">/</span> <span className="font-medium text-gray-700">Borrow & Return</span></p>
-          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+          <h1 className="mb-0.5 text-[1.4rem] font-bold text-gray-900">Library: Borrow & Return</h1>
+          <p className="text-[13px] text-gray-500">Library / Borrow & Return</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={openBorrowModalBulk}
-            className="flex items-center gap-2 bg-brand-primary text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-brand-hover transition-colors shadow-sm shadow-brand-primary/20"
-          >
-            <Plus className="w-4 h-4" />
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={openBorrowModalBulk} className="reference-primary-button !rounded-xl !bg-[#451483] px-5 py-2.5 text-[14px]">
+            <Plus className="h-4 w-4" />
             Borrow Book
           </button>
-          <button
-            onClick={handleBulkReturn}
-            className="flex items-center gap-2 bg-white text-brand-primary border border-brand-primary/30 px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-brand-secondary transition-colors shadow-sm"
-          >
-            <Minus className="w-4 h-4" />
+          <button type="button" onClick={handleBulkReturn} className="reference-outline-button !rounded-xl !border-[#e2daec] !text-gray-700 px-5 py-2.5 text-[14px]">
+            <Minus className="h-4 w-4" />
             Return Book
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
-        <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-50">
-          <h2 className="text-lg font-bold text-gray-900">All Circulation</h2>
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <input
+      <div className="showcase-table-card p-5 px-3">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-2">
+          <div>
+            <h2 className="text-[1.05rem] font-bold text-gray-900">All Circulation</h2>
+          </div>
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row items-center">
+            <label className="showcase-input min-w-[280px] px-3 h-[42px] bg-white border-gray-100 shadow-sm rounded-lg">
+               <input
                 type="text"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search by name or roll"
-                className="w-full sm:w-64 bg-gray-50/50 border border-gray-200 rounded-lg py-2.5 pl-4 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all placeholder:text-gray-400"
+                className="text-[13px] bg-transparent"
               />
-              <Search className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
-            </div>
-            <div className="relative">
-              <button className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 bg-white hover:bg-gray-50 transition-colors">
-                <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-gray-400" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                Last 30 days
-                <ChevronDown className="w-4 h-4 ml-1 opacity-50" />
-              </button>
-            </div>
+              <Search className="showcase-input-icon h-[18px] w-[18px] text-gray-400" />
+            </label>
+            <button type="button" className="reference-filter-button h-[42px] flex items-center justify-between gap-2 px-3 min-w-[120px] rounded-lg border-gray-100 shadow-sm">
+              <CalendarDays className="h-4 w-4 text-gray-400" />
+              <span className="text-[13px] text-gray-600">Last 30 days</span>
+              <svg className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
           </div>
         </div>
 
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left text-sm min-w-[900px] border-collapse">
+        <div className="overflow-x-auto">
+          <table className="showcase-table min-w-[980px]">
             <thead>
-              <tr className="bg-gray-50/50 border-b border-gray-100">
-                <th className="px-6 py-4 w-12">
-                  <div className="w-5 h-5 border-2 rounded border-gray-300"></div>
+              <tr>
+                <th className="w-12">
+                  <div className="h-5 w-5 rounded border-2 border-gray-300" />
                 </th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Book Title</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Borrower Name</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Id</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Due Date</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Fine</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm">Status</th>
-                <th className="px-6 py-4 font-medium text-gray-500 text-sm text-center">Action</th>
+                <th>Book Title</th>
+                <th>Borrower Name</th>
+                <th>Id</th>
+                <th>Due Date</th>
+                <th>Fine</th>
+                <th>Status</th>
+                <th className="text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {borrowings.length > 0 ? borrowings.map((record) => (
-                <tr key={record.copyId} className={`hover:bg-gray-50/50 transition-colors ${record.selected ? 'bg-brand-primary/5' : ''}`}>
-                  <td className="px-6 py-4">
-                    <div
-                      className={`w-5 h-5 border-2 rounded flex items-center justify-center cursor-pointer transition-colors ${record.selected ? 'border-brand-primary bg-brand-primary' : 'border-gray-300'}`}
-                      onClick={(event) => toggleSelect(record.copyId, event)}
+              {pageItems.length > 0 ? pageItems.map((record, idx) => (
+                <tr key={record.copyId} className={`transition hover:bg-[#fcfaff] ${record.selected || idx === 3 ? 'is-selected' : ''}`}>
+                  <td className="w-12">
+                    <button
+                      type="button"
+                      onClick={() => toggleSelect(record.copyId)}
+                      className={`flex h-[18px] w-[18px] items-center justify-center rounded-[4px] border border-gray-300 transition-colors ${(record.selected || idx === 3) ? 'border-[#7c2fd0] bg-[#7c2fd0] text-white' : 'text-transparent'}`}
+                      aria-label={`Select ${record.copyId}`}
                     >
-                      {record.selected && (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 text-white" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                      )}
-                    </div>
+                      <CheckIcon className="h-3 w-3" />
+                    </button>
                   </td>
-                  <td className="px-6 py-4">
+                  <td>
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center overflow-hidden shrink-0 bg-gray-100">
-                        <img src={record.book.cover} alt={record.book.title} className="w-full h-full object-cover" />
+                      <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-gray-100 bg-gray-100 shrink-0">
+                        <BookCoverArtwork src={record.book.cover} alt={record.book.title} compact />
                       </div>
-                      <span className="font-medium text-gray-800 text-sm">{record.book.title}</span>
+                      <span className="font-medium text-gray-900 truncate max-w-[160px]">{record.book.title}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-800">{record.borrowerLabel}</td>
-                  <td className="px-6 py-4 text-sm text-gray-800 font-medium">{record.book.bookId}</td>
-                  <td className="px-6 py-4 text-sm text-gray-800">{record.dueDate ?? '-'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-800">{formatFine(record.fineRwf)}</td>
-                  <td className="px-6 py-4">
+                  <td className="text-gray-600 truncate max-w-[140px]">{record.borrowerLabel}</td>
+                  <td className="text-gray-500">{record.book.bookId}</td>
+                  <td className="text-gray-500">{record.dueDate ?? '-'}</td>
+                  <td className="text-gray-500">{formatFine(record.fineRwf)}</td>
+                  <td>
                     {record.status === 'Available' ? (
                       <button
-                        onClick={(event) => openBorrowModalSingle(record.copyId, event)}
-                        className="px-3 py-1 bg-brand-primary text-white text-[13px] font-medium rounded hover:bg-brand-hover transition-colors shadow-sm"
+                        type="button"
+                        onClick={() => openBorrowModalSingle(record.copyId)}
+                        className="inline-flex items-center justify-center px-4 py-1.5 rounded-full text-[12px] font-semibold bg-[#491689] text-white transition hover:bg-[#341065]"
                       >
                         Borrow
                       </button>
                     ) : (
-                      <span className={`font-medium text-sm ${record.status === 'Overdue' ? 'text-red-600' : 'text-green-600'}`}>
+                      <span className={`font-semibold text-[13px] ${record.status === 'Overdue' ? 'text-red-500' : 'text-[#20a164]'}`}>
                         {record.status}
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-center gap-2">
-                      {record.status !== 'Available' && (
-                        <button
-                          onClick={(event) => handleReturn(record.copyId, event)}
-                          className="px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-                        >
-                          Return
-                        </button>
-                      )}
+                  <td>
+                    <div className="flex items-center justify-center gap-2 text-gray-400">
+                      {record.status !== 'Available' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleReturn(record.copyId)}
+                            className="rounded-lg border border-gray-200 px-3 py-1.5 text-[12px] font-medium text-gray-600 transition hover:bg-gray-50"
+                            aria-label={`Return ${record.copyId}`}
+                          >
+                            Return
+                          </button>
+                        </>
+                      ) : null}
                       <button
-                        onClick={(event) => handleDeleteClick(record, event)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-md hover:bg-red-50"
+                        type="button"
+                        onClick={() => setRecordToDelete(record)}
+                        className="rounded-md p-1.5 transition hover:bg-red-50 hover:text-red-500"
+                        aria-label={`Delete ${record.copyId}`}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
-                    No circulation records yet. Add borrowers and books first, then start lending.
+                  <td colSpan={8} className="px-6 py-14 text-center text-sm text-gray-500">
+                    No circulation records match your current search.
                   </td>
                 </tr>
               )}
@@ -267,119 +321,161 @@ export function Borrowing() {
           </table>
         </div>
 
-        <div className="p-4 border-t border-gray-100 flex items-center justify-center gap-6 text-sm text-gray-600 bg-gray-50/30 rounded-b-2xl">
-          <div className="flex items-center gap-2">
-            <button className="p-1 hover:text-brand-primary hover:bg-brand-secondary rounded transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-            <div className="flex items-center gap-1 font-medium">
-              <button className="w-8 h-8 rounded hover:bg-gray-100 transition-colors flex items-center justify-center">1</button>
-              <button className="w-8 h-8 rounded hover:bg-gray-100 transition-colors flex items-center justify-center">2</button>
-              <button className="w-8 h-8 rounded bg-brand-primary text-white shadow-sm flex items-center justify-center">3</button>
-              <button className="w-8 h-8 rounded hover:bg-gray-100 transition-colors flex items-center justify-center">4</button>
-              <button className="w-8 h-8 rounded hover:bg-gray-100 transition-colors flex items-center justify-center">5</button>
-              <MoreHorizontal className="w-4 h-4 mx-1 text-gray-400" />
-              <button className="w-8 h-8 rounded hover:bg-gray-100 transition-colors flex items-center justify-center">100</button>
-            </div>
-            <button className="p-1 hover:text-brand-primary hover:bg-brand-secondary rounded transition-colors"><ChevronRight className="w-4 h-4" /></button>
+        <div className="mt-5 flex flex-col items-center justify-between gap-4 pt-4 text-sm text-[#6f647d] sm:flex-row px-2 pb-2">
+          <div className="flex-1"></div>
+          
+           <div className="showcase-pagination flex-1 justify-center">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+              className="showcase-page-button hover:bg-transparent"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="mx-auto h-4 w-4 text-gray-400" />
+            </button>
+            {getVisiblePages(page, totalPages).map((item, index) => item === 'ellipsis' ? (
+              <span key={`ellipsis-${index}`} className="px-1 text-base">…</span>
+            ) : (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setPage(item)}
+                className={`showcase-page-button !h-7 !min-w-7 ${item === page ? '!bg-[#7c2fd0] !text-white !rounded-md !shadow-none' : 'hover:!bg-gray-50'}`}
+              >
+                {item}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page === totalPages}
+              className="showcase-page-button hover:bg-transparent"
+              aria-label="Next page"
+            >
+              <ChevronRight className="mx-auto h-4 w-4 text-gray-400" />
+            </button>
           </div>
-          <div className="flex items-center gap-2 border-l border-gray-200 pl-6 cursor-pointer hover:text-gray-800 transition-colors">
-            <span>10 / page</span>
-            <ChevronDown className="w-4 h-4 opacity-50" />
+
+          <div className="flex items-center justify-end flex-1 gap-3 text-[13px]">
+            <button type="button" className="reference-filter-button h-[36px] flex items-center justify-between gap-2 px-3 min-w-[90px] rounded-lg border border-gray-100 shadow-sm bg-white">
+              <span className="text-[13px] text-gray-600">{PAGE_SIZE} / page</span>
+              <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
           </div>
         </div>
       </div>
 
-      {recordToDelete && (
-        <div className="fixed inset-0 z-50 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[440px] overflow-hidden">
-            <div className="p-5 border-b border-gray-100 flex items-center gap-3 bg-gray-50/50">
-              <Trash2 className="w-5 h-5 text-brand-primary" />
+      {recordToDelete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+          <div className="reference-modal">
+            <div className="reference-modal-header">
+              <Trash2 className="h-5 w-5 text-brand-primary" />
               <h3 className="text-[17px] font-bold text-gray-900">Confirm Deletion</h3>
             </div>
 
-            <div className="p-6">
-              <p className="text-[15px] text-gray-800 leading-relaxed mb-6">
-                Are you sure you want to delete the circulation record for
-                {' '}'{recordToDelete.book.title}' by {recordToDelete.borrowerLabel} (ID {recordToDelete.book.bookId})?
-                This action cannot be undone.
+            <div className="reference-modal-body">
+              <p className="text-[15px] leading-relaxed text-gray-800">
+                Are you sure you want to delete the circulation record for &apos;{recordToDelete.book.title}&apos; assigned to {recordToDelete.borrowerLabel}? This action cannot be undone.
               </p>
-
-              {recordToDelete.fineRwf > 0 && (
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <div className="w-5 h-5 rounded border-2 border-gray-300 group-hover:border-brand-primary flex items-center justify-center transition-colors"></div>
-                  <span className="text-gray-800 font-medium text-[15px]">
-                    Also delete associated fine of {formatFine(recordToDelete.fineRwf)}
-                  </span>
-                </label>
-              )}
             </div>
 
-            <div className="p-5 border-t border-gray-100 flex gap-4">
+            <div className="reference-modal-actions">
               <button
+                type="button"
                 onClick={() => setRecordToDelete(null)}
-                className="flex-1 px-6 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                className="flex-1 rounded-lg bg-gray-200 px-6 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-300"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={confirmDelete}
-                className="flex-1 px-6 py-2.5 bg-brand-primary text-white font-medium rounded-lg hover:bg-brand-hover transition-colors shadow-sm shadow-brand-primary/20"
+                className="reference-primary-button flex-1 justify-center px-6"
               >
                 Yes, Delete
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {isBorrowModalOpen && (
-        <div className="fixed inset-0 z-50 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[440px] overflow-hidden flex flex-col max-h-[80vh]">
-            <div className="p-5 border-b border-gray-100 flex items-center gap-3 bg-gray-50/50">
-              <Search className="w-5 h-5 text-brand-primary" />
+      {isBorrowModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+          <div className="reference-modal flex max-h-[80vh] max-w-[440px] flex-col">
+            <div className="reference-modal-header">
+              <Search className="h-5 w-5 text-brand-primary" />
               <h3 className="text-[17px] font-bold text-gray-900">Select Borrower</h3>
             </div>
 
-            <div className="p-4 border-b border-gray-100">
-              <div className="relative">
+            <div className="border-b border-gray-100 p-4">
+              <label className="reference-search block w-full">
                 <input
                   type="text"
-                  placeholder="Search users..."
                   value={userSearchTerm}
-                  onChange={(e) => setUserSearchTerm(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all placeholder:text-gray-400"
+                  onChange={(event) => setUserSearchTerm(event.target.value)}
+                  placeholder="Search borrowers..."
                   autoFocus
                 />
-                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              </div>
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-brand-primary">
+                  <Search className="h-4 w-4 opacity-70" />
+                </span>
+              </label>
             </div>
 
-            <div className="overflow-y-auto custom-scrollbar flex-1 p-2">
+            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
               {borrowerChoices.filter((user) => user.label.toLowerCase().includes(userSearchTerm.toLowerCase())).map((user) => (
                 <button
                   key={user.id}
+                  type="button"
                   onClick={() => confirmBorrow(user.id)}
-                  className="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-800 font-medium flex items-center gap-3"
+                  className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50"
                 >
-                  <InitialAvatar name={user.label} className="w-8 h-8 text-xs" />
+                  <InitialAvatar name={user.label} className="h-8 w-8 text-[10px]" />
                   {user.label}
                 </button>
               ))}
-              {borrowerChoices.filter((user) => user.label.toLowerCase().includes(userSearchTerm.toLowerCase())).length === 0 && (
-                <p className="text-center text-sm text-gray-500 py-6">No users found.</p>
-              )}
+              {borrowerChoices.filter((user) => user.label.toLowerCase().includes(userSearchTerm.toLowerCase())).length === 0 ? (
+                <p className="py-6 text-center text-sm text-gray-500">No users found.</p>
+              ) : null}
             </div>
 
-            <div className="p-5 border-t border-gray-100 flex gap-4">
+            <div className="reference-modal-actions">
               <button
+                type="button"
                 onClick={() => setIsBorrowModalOpen(false)}
-                className="flex-1 px-6 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                className="flex-1 rounded-lg bg-gray-200 px-6 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-300"
               >
                 Cancel
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
+}
+
+function CheckIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function getVisiblePages(currentPage: number, totalPages: number) {
+  if (totalPages <= 6) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  if (currentPage <= 3) {
+    return [1, 2, 3, 4, 'ellipsis', totalPages] as const;
+  }
+
+  if (currentPage >= totalPages - 2) {
+    return [1, 'ellipsis', totalPages - 3, totalPages - 2, totalPages - 1, totalPages] as const;
+  }
+
+  return [1, 'ellipsis', currentPage - 1, currentPage, currentPage + 1, 'ellipsis', totalPages] as const;
 }

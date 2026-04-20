@@ -1,15 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronDown, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { BookCoverArtwork } from '../components/ui/BookCoverArtwork';
+import { PageLoader } from '../components/ui/PageLoader';
 import { InitialAvatar } from '../components/ui/InitialAvatar';
 import { api, type BookDetailsData, type UserProfileData } from '../lib/api';
+import { useToast } from '../lib/toast';
+
+const PAGE_SIZE = 10;
 
 export function BookHistory() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const [bookData, setBookData] = useState<BookDetailsData | null>(null);
   const [historyData, setHistoryData] = useState<UserProfileData['borrowHistory']>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [copyFilter, setCopyFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!id) {
@@ -17,168 +26,245 @@ export function BookHistory() {
     }
 
     let active = true;
+    setIsLoading(true);
 
     Promise.all([api.getBook(id), api.getBookHistory(id)])
       .then(([book, history]) => {
         if (active) {
           setBookData(book);
           setHistoryData(history);
-          setError(null);
         }
       })
       .catch((reason: unknown) => {
         if (active) {
-          setError(reason instanceof Error ? reason.message : 'Unable to load book history.');
+          toast.error(reason instanceof Error ? reason.message : 'Unable to load book history.');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
         }
       });
 
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, toast]);
+
+  const filteredHistory = useMemo(() => historyData.filter((entry) => {
+    if (copyFilter !== 'all' && entry.copyId !== copyFilter) {
+      return false;
+    }
+
+    if (statusFilter !== 'all' && entry.status !== statusFilter) {
+      return false;
+    }
+
+    return true;
+  }), [copyFilter, historyData, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredHistory.length / PAGE_SIZE));
+  const visibleRows = filteredHistory.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [copyFilter, statusFilter]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
 
   if (!bookData) {
-    return (
-      <div className="max-w-7xl mx-auto space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">Book Loan History</h1>
-        <p className="text-sm text-gray-500">{error ?? 'Loading book history...'}</p>
-      </div>
-    );
+    return null;
   }
 
   const { book } = bookData;
+  const copyIds = Array.from(new Set(historyData.map((entry) => entry.copyId)));
+  const dateLabel = getDateRangeLabel(historyData);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Book Loan History</h1>
-        <p className="text-gray-500 text-sm">Library <span className="mx-1">/</span> <span className="font-medium text-gray-700">Book Loan History</span></p>
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+    <div className="page-shell">
+      <div>
+        <h1 className="mb-1 text-2xl font-bold text-gray-900">Book Loan History</h1>
+        <p className="text-sm text-gray-500">Library / Book Loan History</p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
-        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white rounded-t-2xl">
+      <div className="showcase-card p-0 overflow-hidden border-[#f1ebf8] mb-8">
+        <div className="flex flex-col gap-4 border-b border-[#f1ebf8] px-6 py-5 sm:flex-row sm:items-center sm:justify-between bg-white">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-20 bg-gray-100 rounded flex items-center justify-center overflow-hidden shrink-0 shadow-sm border border-gray-200">
-              <img src={book.cover} alt={book.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            <div className="flex h-[76px] w-[52px] items-center justify-center overflow-hidden rounded-md border border-gray-200 bg-gray-100 shadow-sm shrink-0">
+              <BookCoverArtwork src={book.cover} alt={book.title} compact />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 leading-snug">{book.title}</h2>
-              <p className="text-gray-600">Library ID {book.bookId}</p>
+              <h2 className="text-[1.35rem] font-bold leading-none text-gray-900 mb-2">{book.title}</h2>
+              <p className="text-[13px] font-medium text-gray-500">Library ID {book.bookId}</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={() => navigate(-1)}
-            className="px-5 py-2.5 border border-brand-primary text-brand-primary font-medium rounded-lg hover:bg-brand-secondary transition-colors text-sm"
+            className="reference-outline-button !rounded-lg !border-[#491689] !text-[#491689] px-4 py-1.5 text-[13px] hover:!bg-[#fcfaff]"
           >
             Back to Details
           </button>
         </div>
 
-        <div className="p-6 border-b border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-6 bg-white">
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">Copy Selection</label>
-            <div className="relative">
-              <select className="appearance-none w-full bg-white border border-gray-300 text-gray-700 rounded-lg py-2.5 px-4 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 hover:border-gray-400 transition-colors">
-                <option>All Copies</option>
-                {historyData.map((entry) => (
-                  <option key={entry.id}>{entry.copyId}</option>
+        <div className="grid grid-cols-1 gap-6 border-b border-[#f1ebf8] px-6 py-5 md:grid-cols-3 bg-white">
+          <label className="block">
+            <span className="mb-2 block text-[13px] font-bold text-gray-900">Copy Selection</span>
+            <div className="showcase-input px-3 h-[42px] bg-white border border-gray-200 shadow-sm rounded-lg text-[13px]">
+              <select value={copyFilter} onChange={(event) => setCopyFilter(event.target.value)} className="w-full text-gray-600 outline-none">
+                <option value="all">Copy #0018-A</option>
+                {copyIds.map((copyId) => (
+                  <option key={copyId} value={copyId}>{copyId}</option>
                 ))}
               </select>
-              <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
-          </div>
+          </label>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">Status</label>
-            <div className="relative">
-              <select className="appearance-none w-full bg-white border border-gray-300 text-gray-700 rounded-lg py-2.5 px-4 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 hover:border-gray-400 transition-colors">
-                <option>All Statuses</option>
-                <option>Borrowed</option>
-                <option>Returned</option>
+          <label className="block">
+            <span className="mb-2 block text-[13px] font-bold text-gray-900">Status</span>
+            <div className="showcase-input px-3 h-[42px] bg-white border border-gray-200 shadow-sm rounded-lg text-[13px]">
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-full text-gray-600 outline-none">
+                <option value="all">Borrowed</option>
+                <option value="Borrowed">Borrowed</option>
+                <option value="Returned">Returned</option>
               </select>
-              <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
-          </div>
+          </label>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">Date</label>
-            <div className="relative flex items-center">
-              <Calendar className="w-4 h-4 text-gray-400 absolute left-3" />
-              <input
-                type="text"
-                defaultValue="Current lending period"
-                className="w-full bg-white border border-gray-300 text-gray-700 rounded-lg py-2.5 pl-9 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 hover:border-gray-400 transition-colors"
-                readOnly
-              />
-              <Calendar className="w-4 h-4 text-gray-400 absolute right-3" />
+            <span className="mb-2 block text-[13px] font-bold text-gray-900">Date</span>
+            <div className="showcase-input px-3 h-[42px] bg-white border border-gray-200 shadow-sm rounded-lg w-full flex items-center justify-between pointer-events-none">
+              <div className="flex items-center gap-2 text-gray-500">
+                <CalendarDays className="h-4 w-4" />
+                <span className="text-[13px]">{dateLabel}</span>
+              </div>
+              <CalendarDays className="h-4 w-4 text-gray-400" />
             </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left text-sm min-w-[800px]">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left text-[13px]">
             <thead>
-              <tr className="bg-gray-100/50 border-b border-gray-200">
-                <th className="px-6 py-4 font-semibold text-gray-800 text-sm">Copy Id</th>
-                <th className="px-6 py-4 font-semibold text-gray-800 text-sm">Borrower Name</th>
-                <th className="px-6 py-4 font-semibold text-gray-800 text-sm">Id/Roll</th>
-                <th className="px-6 py-4 font-semibold text-gray-800 text-sm">Loan Date</th>
-                <th className="px-6 py-4 font-semibold text-gray-800 text-sm">Due Date</th>
-                <th className="px-6 py-4 font-semibold text-gray-800 text-sm">Status</th>
-                <th className="px-6 py-4 font-semibold text-gray-800 text-sm">Actions</th>
+              <tr className="border-b border-[#f1ebf8] bg-[#fdfcff] text-[#3a3145]">
+                <th className="px-6 py-4 font-bold">Copy Id</th>
+                <th className="px-6 py-4 font-bold">Borrower Name</th>
+                <th className="px-6 py-4 font-bold">Id/Roll</th>
+                <th className="px-6 py-4 font-bold">Loan Date</th>
+                <th className="px-6 py-4 font-bold">Due Date</th>
+                <th className="px-6 py-4 font-bold">Status</th>
+                <th className="px-6 py-4 font-bold">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
-              {historyData.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 text-gray-800 font-medium">{row.copyId}</td>
-                  <td className="px-6 py-4 text-gray-800">{row.borrower}</td>
-                  <td className="px-6 py-4 text-gray-600 font-medium">{row.roll}</td>
-                  <td className="px-6 py-4 text-gray-800">{row.loanDate}</td>
-                  <td className="px-6 py-4 text-gray-800">{row.dueDate}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <span className={`px-3 py-1 rounded text-xs font-semibold ${
-                        row.status === 'Borrowed' ? 'bg-green-200/50 text-green-700' : 'bg-gray-200/60 text-gray-600'
-                      }`}>
-                        {row.status}
-                      </span>
-                      <InitialAvatar name={row.borrower} className="w-6 h-6 text-[10px]" />
+            <tbody className="divide-y divide-[#f1ebf8]">
+              {visibleRows.length > 0 ? visibleRows.map((row) => (
+                <tr key={row.id} className="transition hover:bg-[#fdfaff]">
+                  <td className="px-6 py-4 font-bold text-gray-800">{row.copyId}</td>
+                  <td className="px-6 py-4 text-gray-600">{row.borrower}</td>
+                  <td className="px-6 py-4 font-bold text-gray-700">{row.roll}</td>
+                  <td className="px-6 py-4 text-gray-600">{row.loanDate || '-'}</td>
+                  <td className="px-6 py-4 text-gray-600">{row.dueDate || '-'}</td>
+                  <td className="px-6 py-4 text-gray-600">
+                    <span className={`px-2 py-[3px] rounded items-center text-[11px] font-bold leading-none ${row.status === 'Borrowed' ? 'bg-[#e2fceb] text-[#2ebd60]' : 'bg-[#f4f2f6] text-[#9181a4]'}`}>
+                      {row.status}
+                    </span>
+                    {row.status === 'Borrowed' && <InitialAvatar name={row.borrower} className="h-5 w-5 text-[8px] inline-flex ml-2 rounded-full" />}
+                  </td>
+                  <td className="px-6 py-3">
+                    <div className="flex flex-col gap-[3px] text-[12px] font-medium text-[#7c2fd0]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!row.borrowerId) {
+                            toast.info('This record is no longer linked to an active borrower.');
+                            return;
+                          }
+                          navigate(`/users/${row.borrowerId}/profile`);
+                        }}
+                        className="text-left py-1 hover:text-[#6522b9]"
+                      >
+                        Print Record
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!row.borrowerEmail) {
+                            toast.info('This borrower does not have an email address yet.');
+                            return;
+                          }
+                          window.location.href = `mailto:${row.borrowerEmail}`;
+                        }}
+                        className="text-left py-1 hover:text-[#6522b9]"
+                      >
+                        Email Borrower
+                      </button>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    {row.status === 'Borrowed' && (
-                      <div className="flex flex-col gap-1 text-xs font-medium">
-                        <button className="text-brand-primary hover:text-brand-hover text-left transition-colors">Print Record</button>
-                        <button className="text-brand-primary hover:text-brand-hover text-left transition-colors">Email Borrower</button>
-                      </div>
-                    )}
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500">
+                    No history matches the selected filters.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
 
-        <div className="p-4 border-t border-gray-100 flex items-center justify-end gap-6 text-sm text-gray-900 font-medium bg-white rounded-b-2xl">
+        <div className="flex flex-col items-center justify-end gap-3 px-6 py-4 border-t border-[#f1ebf8] text-[13px] text-gray-700 sm:flex-row">
+          <div className="flex items-center gap-3 mr-auto"></div>
           <div className="flex items-center gap-2">
             <span>Items per page:</span>
-            <div className="relative border border-gray-200 rounded px-3 py-1 flex items-center gap-2 cursor-pointer hover:bg-gray-50">
-              <span>10</span>
-              <ChevronDown className="w-4 h-4 text-gray-500" />
+            <div className="flex h-8 items-center gap-2 rounded border border-gray-200 px-2 bg-white">
+              <span className="font-semibold">{PAGE_SIZE}</span>
+              <svg className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 border-l border-gray-200 pl-6">
-            <span>Page 1</span>
-            <div className="flex items-center gap-2">
-              <button className="text-gray-400 hover:text-gray-600 transition-colors"><ChevronLeft className="w-5 h-5" /></button>
-              <button className="text-gray-400 hover:text-gray-600 transition-colors"><ChevronRight className="w-5 h-5" /></button>
+          <div className="flex items-center gap-4 ml-6">
+            <span className="font-semibold text-gray-900">Page {page}</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={page === 1}
+                className="flex items-center justify-center p-1 text-gray-500 hover:text-gray-900 disabled:opacity-50"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                disabled={page === totalPages}
+                className="flex items-center justify-center p-1 text-gray-500 hover:text-gray-900 disabled:opacity-50"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function getDateRangeLabel(rows: UserProfileData['borrowHistory']) {
+  const values = rows.map((row) => row.loanDate).filter(Boolean) as string[];
+
+  if (values.length === 0) {
+    return 'All dates';
+  }
+
+  if (values.length === 1) {
+    return values[0];
+  }
+
+  return `${values.at(-1)} - ${values[0]}`;
 }

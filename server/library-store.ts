@@ -3,18 +3,13 @@ import { hashPassword } from './auth.ts';
 import { config } from './config.ts';
 import { formatDisplayDate, parseHumanDate } from './date-utils.ts';
 import { pool } from './db.ts';
+import { createNotification } from './notification-store.ts';
 
 type UserRow = {
   id: number;
   full_name: string;
   first_name: string;
   last_name: string;
-  father_name: string;
-  mother_name: string;
-  father_occupation: string;
-  mother_occupation: string;
-  date_of_birth: string | null;
-  religion: string;
   class_level: string;
   stream_name: string;
   class_name: string;
@@ -22,13 +17,8 @@ type UserRow = {
   student_id: string;
   admission_date: string | null;
   primary_phone: string;
-  secondary_phone: string;
   primary_email: string;
-  secondary_email: string;
   address: string;
-  street_address: string;
-  house_name: string;
-  house_number: string;
   borrow_score: number;
   lifetime_borrowed: number;
   overdue_events: number;
@@ -96,6 +86,7 @@ type LoanHistoryRow = {
   fine_rwf: number;
   borrower_id: number | null;
   borrower_name: string | null;
+  borrower_email: string | null;
   borrower_roll: string | null;
   borrower_student_id: string | null;
   borrower_class_name: string | null;
@@ -127,6 +118,11 @@ function normalizeText(value: unknown) {
   return String(value ?? '').trim();
 }
 
+function normalizeBookCover(value: string | null | undefined) {
+  const normalized = normalizeText(value);
+  return normalized === '/logo.png' ? '' : normalized;
+}
+
 function buildFullName(firstName: string, lastName: string) {
   return `${firstName.trim()} ${lastName.trim()}`.trim();
 }
@@ -134,6 +130,12 @@ function buildFullName(firstName: string, lastName: string) {
 function parsePositiveInteger(value: unknown, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function addDaysToIsoDate(value: string | null | undefined, days: number) {
+  const start = value ? new Date(`${value}T00:00:00.000Z`) : new Date();
+  start.setUTCDate(start.getUTCDate() + days);
+  return start.toISOString().slice(0, 10);
 }
 
 async function generateNextStudentId(client: PoolClient) {
@@ -172,12 +174,6 @@ function serializeUser(row: UserRow) {
     name: row.full_name,
     firstName: row.first_name,
     lastName: row.last_name,
-    fatherName: row.father_name,
-    motherName: row.mother_name,
-    fatherOccupation: row.father_occupation,
-    motherOccupation: row.mother_occupation,
-    dob: formatDisplayDate(row.date_of_birth),
-    religion: row.religion,
     classLevel: row.class_level,
     section: row.stream_name,
     className: row.class_name,
@@ -185,13 +181,8 @@ function serializeUser(row: UserRow) {
     studentId: row.student_id,
     admissionDate: formatDisplayDate(row.admission_date),
     primaryPhone: row.primary_phone,
-    secondaryPhone: row.secondary_phone,
     primaryEmail: row.primary_email,
-    secondaryEmail: row.secondary_email,
     address: row.address,
-    streetAddress: row.street_address,
-    houseName: row.house_name,
-    houseNumber: row.house_number,
     borrowScore: row.borrow_score,
     lifetimeBorrowed: row.lifetime_borrowed,
     overdueEvents: row.overdue_events,
@@ -211,8 +202,8 @@ function serializeBook(row: BookRow) {
     subject: row.subject,
     className: row.class_name,
     publishDate: formatDisplayDate(row.publish_date),
-    cover: row.cover,
-    detailCover: row.detail_cover,
+    cover: normalizeBookCover(row.cover),
+    detailCover: normalizeBookCover(row.detail_cover),
     summary: row.summary,
     deweyDecimal: row.dewey_decimal,
     publisher: row.publisher,
@@ -275,6 +266,7 @@ function serializeLoanHistory(row: LoanHistoryRow) {
   return {
     id: row.id,
     copyId: row.copy_code,
+    borrowerId: row.borrower_id,
     borrower: row.borrower_name ?? '-',
     borrowerClassName: row.borrower_class_name,
     roll: row.borrower_roll ?? '-',
@@ -284,10 +276,11 @@ function serializeLoanHistory(row: LoanHistoryRow) {
     returnedDate: formatDisplayDate(row.returned_date),
     status: row.status,
     fineRwf: row.fine_rwf,
+    borrowerEmail: row.borrower_email,
     bookId: row.book_id,
     bookTitle: row.book_title,
     subject: row.book_subject,
-    bookCover: row.book_cover,
+    bookCover: normalizeBookCover(row.book_cover),
   };
 }
 
@@ -355,7 +348,6 @@ export async function initializeLibraryStore() {
       mother_name TEXT NOT NULL DEFAULT '',
       father_occupation TEXT NOT NULL DEFAULT '',
       mother_occupation TEXT NOT NULL DEFAULT '',
-      date_of_birth DATE,
       religion TEXT NOT NULL DEFAULT '',
       class_level TEXT NOT NULL,
       stream_name TEXT NOT NULL,
@@ -390,8 +382,8 @@ export async function initializeLibraryStore() {
       subject TEXT NOT NULL,
       class_name TEXT NOT NULL,
       publish_date DATE,
-      cover TEXT NOT NULL DEFAULT '/logo.png',
-      detail_cover TEXT NOT NULL DEFAULT '/logo.png',
+      cover TEXT NOT NULL DEFAULT '',
+      detail_cover TEXT NOT NULL DEFAULT '',
       summary TEXT NOT NULL DEFAULT '',
       dewey_decimal TEXT NOT NULL DEFAULT '',
       publisher TEXT NOT NULL DEFAULT '',
@@ -440,13 +432,38 @@ export async function initializeLibraryStore() {
       amount_owed_rwf INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY,
+      type TEXT NOT NULL DEFAULT 'system',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      link TEXT,
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS password_reset_codes (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      consumed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    ALTER TABLE borrowers DROP COLUMN IF EXISTS date_of_birth;
+    ALTER TABLE books ALTER COLUMN cover SET DEFAULT '';
+    ALTER TABLE books ALTER COLUMN detail_cover SET DEFAULT '';
   `);
 
   await ensureAdminUser();
   await refreshOverdueStatuses();
 }
 
-export async function getDashboardData() {
+export async function getDashboardData(staffProfile?: { name: string; role: string }) {
   await refreshOverdueStatuses();
 
   const [
@@ -513,10 +530,10 @@ export async function getDashboardData() {
 
   return {
     staffProfile: {
-      name: config.librarianName,
-      role: config.librarianRole,
+      name: staffProfile?.name ?? config.librarianName,
+      role: staffProfile?.role ?? config.librarianRole,
     },
-    welcomeName: config.librarianName.split(' ').at(-1) ?? config.librarianName,
+    welcomeName: (staffProfile?.name ?? config.librarianName).split(' ').at(-1) ?? config.librarianName,
     stats: [
       { label: 'Total Borrowers', value: borrowerCountResult.rows[0]?.count ?? '0', trend: null, bg: 'bg-purple-50', text: 'text-purple-600' },
       { label: 'Active Loans', value: activeLoansResult.rows[0]?.count ?? '0', trend: null, bg: 'bg-purple-50', text: 'text-purple-600' },
@@ -586,12 +603,6 @@ export async function createUser(payload: Record<string, unknown>) {
           full_name,
           first_name,
           last_name,
-          father_name,
-          mother_name,
-          father_occupation,
-          mother_occupation,
-          date_of_birth,
-          religion,
           class_level,
           stream_name,
           class_name,
@@ -599,13 +610,8 @@ export async function createUser(payload: Record<string, unknown>) {
           student_id,
           admission_date,
           primary_phone,
-          secondary_phone,
           primary_email,
-          secondary_email,
           address,
-          street_address,
-          house_name,
-          house_number,
           borrow_score,
           lifetime_borrowed,
           overdue_events,
@@ -614,8 +620,7 @@ export async function createUser(payload: Record<string, unknown>) {
           is_selected
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-          $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-          $21, $22, $23, 0, 0, 0, 0, 0, FALSE
+          $11, $12, 0, 0, 0, 0, 0, FALSE
         )
         RETURNING *
       `,
@@ -623,12 +628,6 @@ export async function createUser(payload: Record<string, unknown>) {
         buildFullName(firstName, lastName),
         firstName,
         lastName,
-        normalizeText(payload.fatherName),
-        normalizeText(payload.motherName),
-        normalizeText(payload.fatherOccupation),
-        normalizeText(payload.motherOccupation),
-        parseHumanDate(normalizeText(payload.dob)),
-        normalizeText(payload.religion),
         classLevel,
         section,
         className,
@@ -636,18 +635,22 @@ export async function createUser(payload: Record<string, unknown>) {
         studentId,
         parseHumanDate(normalizeText(payload.admissionDate)),
         normalizeText(payload.primaryPhone),
-        normalizeText(payload.secondaryPhone),
         normalizeText(payload.primaryEmail),
-        normalizeText(payload.secondaryEmail),
         normalizeText(payload.address),
-        normalizeText(payload.streetAddress),
-        normalizeText(payload.houseName),
-        normalizeText(payload.houseNumber),
       ],
     );
 
     await client.query('COMMIT');
-    return serializeUser(result.rows[0]);
+    const createdUser = serializeUser(result.rows[0]);
+
+    await createNotification({
+      type: 'user',
+      title: 'Borrower added',
+      message: `${createdUser.name} was added to the library system.`,
+      link: `/users/${createdUser.id}/details`,
+    }).catch(() => undefined);
+
+    return createdUser;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -665,6 +668,10 @@ export async function updateUserById(userId: number, payload: Record<string, unk
   const roll = normalizeText(payload.roll);
   const fullName = buildFullName(firstName, lastName);
 
+  if (!firstName || !lastName || !classLevel || !section || !roll) {
+    throw new Error('First name, last name, year, stream, and roll are required.');
+  }
+
   const conflictingBorrower = await pool.query<{ id: number }>(
     'SELECT id FROM borrowers WHERE roll = $1 AND id <> $2 LIMIT 1',
     [roll, userId],
@@ -681,25 +688,14 @@ export async function updateUserById(userId: number, payload: Record<string, unk
         full_name = $2,
         first_name = $3,
         last_name = $4,
-        father_name = $5,
-        mother_name = $6,
-        father_occupation = $7,
-        mother_occupation = $8,
-        date_of_birth = $9,
-        religion = $10,
-        class_level = $11,
-        stream_name = $12,
-        class_name = $13,
-        roll = $14,
-        admission_date = $15,
-        primary_phone = $16,
-        secondary_phone = $17,
-        primary_email = $18,
-        secondary_email = $19,
-        address = $20,
-        street_address = $21,
-        house_name = $22,
-        house_number = $23,
+        class_level = $5,
+        stream_name = $6,
+        class_name = $7,
+        roll = $8,
+        admission_date = $9,
+        primary_phone = $10,
+        primary_email = $11,
+        address = $12,
         updated_at = NOW()
       WHERE id = $1
       RETURNING *
@@ -709,29 +705,29 @@ export async function updateUserById(userId: number, payload: Record<string, unk
       fullName,
       firstName,
       lastName,
-      normalizeText(payload.fatherName),
-      normalizeText(payload.motherName),
-      normalizeText(payload.fatherOccupation),
-      normalizeText(payload.motherOccupation),
-      parseHumanDate(normalizeText(payload.dob)) ?? null,
-      normalizeText(payload.religion),
       classLevel,
       section,
       className,
       roll,
       parseHumanDate(normalizeText(payload.admissionDate)) ?? null,
       normalizeText(payload.primaryPhone),
-      normalizeText(payload.secondaryPhone),
       normalizeText(payload.primaryEmail),
-      normalizeText(payload.secondaryEmail),
       normalizeText(payload.address),
-      normalizeText(payload.streetAddress),
-      normalizeText(payload.houseName),
-      normalizeText(payload.houseNumber),
     ],
   );
 
-  return result.rows[0] ? serializeUser(result.rows[0]) : null;
+  const updatedUser = result.rows[0] ? serializeUser(result.rows[0]) : null;
+
+  if (updatedUser) {
+    await createNotification({
+      type: 'user',
+      title: 'Borrower updated',
+      message: `${updatedUser.name}'s information was updated.`,
+      link: `/users/${updatedUser.id}/details`,
+    }).catch(() => undefined);
+  }
+
+  return updatedUser;
 }
 
 export async function deleteUserById(userId: number) {
@@ -749,7 +745,20 @@ export async function deleteUserById(userId: number) {
     return { deleted: false, reason: 'This borrower still has circulation activity and cannot be removed.' };
   }
 
-  const result = await pool.query('DELETE FROM borrowers WHERE id = $1', [userId]);
+  const result = await pool.query<{ full_name: string }>(
+    'DELETE FROM borrowers WHERE id = $1 RETURNING full_name',
+    [userId],
+  );
+
+  if (result.rowCount > 0) {
+    await createNotification({
+      type: 'user',
+      title: 'Borrower removed',
+      message: `${result.rows[0]?.full_name ?? 'A borrower'} was removed from the library system.`,
+      link: '/users',
+    }).catch(() => undefined);
+  }
+
   return { deleted: result.rowCount > 0, reason: result.rowCount ? null : 'Borrower not found.' };
 }
 
@@ -797,6 +806,7 @@ export async function getBookById(bookId: number) {
         c.fine_rwf,
         u.id AS borrower_id,
         u.full_name AS borrower_name,
+        u.primary_email AS borrower_email,
         u.roll AS borrower_roll,
         u.student_id AS borrower_student_id,
         u.class_name AS borrower_class_name,
@@ -852,8 +862,8 @@ export async function createBook(payload: Record<string, unknown>) {
       throw new Error('A book with that library ID already exists.');
     }
 
-    const coverUrl = normalizeText(payload.cover) || '/logo.png';
-    const detailCoverUrl = normalizeText(payload.detailCover) || coverUrl;
+    const coverUrl = normalizeBookCover(normalizeText(payload.cover));
+    const detailCoverUrl = normalizeBookCover(normalizeText(payload.detailCover)) || coverUrl;
 
     const insertResult = await client.query<{ id: number }>(
       `
@@ -917,7 +927,16 @@ export async function createBook(payload: Record<string, unknown>) {
     }
 
     await client.query('COMMIT');
-    return getBookById(createdBookId);
+    const createdBook = await getBookById(createdBookId);
+
+    await createNotification({
+      type: 'book',
+      title: 'Book added',
+      message: `${title} was added to the library catalog.`,
+      link: `/library/${createdBookId}/details`,
+    }).catch(() => undefined);
+
+    return createdBook;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -974,8 +993,8 @@ export async function updateBookById(bookId: number, payload: Record<string, unk
       normalizeText(payload.subject) || existingBook.subject,
       normalizeText(payload.className) || existingBook.class_name,
       parseHumanDate(normalizeText(payload.publishDate)) ?? existingBook.publish_date,
-      normalizeText(payload.cover) || existingBook.cover,
-      normalizeText(payload.detailCover) || existingBook.detail_cover,
+      normalizeBookCover(normalizeText(payload.cover)) || normalizeBookCover(existingBook.cover),
+      normalizeBookCover(normalizeText(payload.detailCover)) || normalizeBookCover(existingBook.detail_cover),
       normalizeText(payload.summary) || existingBook.summary,
       normalizeText(payload.deweyDecimal) || existingBook.dewey_decimal,
       normalizeText(payload.publisher) || existingBook.publisher,
@@ -987,7 +1006,16 @@ export async function updateBookById(bookId: number, payload: Record<string, unk
   );
 
   await reconcileBookCopies(bookId, existingBook.book_id, requestedTotalCopies);
-  return { book: await getBookById(bookId), error: null };
+  const updatedBook = await getBookById(bookId);
+
+  await createNotification({
+    type: 'book',
+    title: 'Book updated',
+    message: `${normalizeText(payload.title) || existingBook.title} was updated.`,
+    link: `/library/${bookId}/details`,
+  }).catch(() => undefined);
+
+  return { book: updatedBook, error: null };
 }
 
 async function reconcileBookCopies(bookId: number, bookCode: string, requestedTotalCopies: number) {
@@ -1041,7 +1069,20 @@ export async function deleteBookById(bookId: number) {
     return { deleted: false, reason: 'This book already has circulation history and cannot be deleted safely.' };
   }
 
-  const result = await pool.query('DELETE FROM books WHERE id = $1', [bookId]);
+  const result = await pool.query<{ title: string }>(
+    'DELETE FROM books WHERE id = $1 RETURNING title',
+    [bookId],
+  );
+
+  if (result.rowCount > 0) {
+    await createNotification({
+      type: 'book',
+      title: 'Book removed',
+      message: `${result.rows[0]?.title ?? 'A book'} was removed from the catalog.`,
+      link: '/library',
+    }).catch(() => undefined);
+  }
+
   return { deleted: result.rowCount > 0, reason: result.rowCount ? null : 'Book not found.' };
 }
 
@@ -1058,6 +1099,7 @@ export async function getBookHistory(bookId: number) {
         h.fine_rwf,
         u.id AS borrower_id,
         u.full_name AS borrower_name,
+        u.primary_email AS borrower_email,
         u.roll AS borrower_roll,
         u.student_id AS borrower_student_id,
         u.class_name AS borrower_class_name,
@@ -1132,18 +1174,21 @@ export async function createBorrowing(payload: {
   const loanDate = parseHumanDate(payload.loanDate ?? formatDisplayDate(new Date()) ?? '') ?? new Date().toISOString().slice(0, 10);
   const dueDate = parseHumanDate(payload.dueDate ?? '') ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const client = await pool.connect();
+  let borrowerName = 'Borrower';
 
   try {
     await client.query('BEGIN');
 
-    const borrowerResult = await client.query<{ id: number }>(
-      'SELECT id FROM borrowers WHERE id = $1 LIMIT 1',
+    const borrowerResult = await client.query<{ id: number; full_name: string }>(
+      'SELECT id, full_name FROM borrowers WHERE id = $1 LIMIT 1',
       [payload.borrowerUserId],
     );
 
     if (!borrowerResult.rowCount) {
       throw new Error('Borrower not found.');
     }
+
+    borrowerName = borrowerResult.rows[0]?.full_name ?? borrowerName;
 
     for (const copyId of payload.copyIds) {
       const copyRow = await client.query<{ book_id: number; status: string }>(
@@ -1193,6 +1238,18 @@ export async function createBorrowing(payload: {
       );
     }
 
+    await client.query(
+      `
+        UPDATE borrowers
+        SET
+          lifetime_borrowed = lifetime_borrowed + $2,
+          borrow_score = borrow_score + $2,
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [payload.borrowerUserId, payload.copyIds.length],
+    );
+
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -1201,12 +1258,37 @@ export async function createBorrowing(payload: {
     client.release();
   }
 
+  await createNotification({
+    type: 'circulation',
+    title: payload.copyIds.length === 1 ? 'Book borrowed' : 'Books borrowed',
+    message: `${borrowerName} borrowed ${payload.copyIds.length} ${payload.copyIds.length === 1 ? 'copy' : 'copies'}.`,
+    link: '/borrowing',
+  }).catch(() => undefined);
+
   return getBorrowings();
 }
 
 export async function returnBorrowing(copyId: string) {
-  const currentBorrowing = await pool.query<{ borrower_user_id: number | null; loan_date: string | null; status: string }>(
-    'SELECT borrower_user_id, loan_date, status FROM book_copies WHERE copy_code = $1',
+  const currentBorrowing = await pool.query<{
+    borrower_user_id: number | null;
+    loan_date: string | null;
+    status: string;
+    borrower_name: string | null;
+    book_title: string | null;
+  }>(
+    `
+      SELECT
+        c.borrower_user_id,
+        c.loan_date,
+        c.status,
+        b.title AS book_title,
+        u.full_name AS borrower_name
+      FROM book_copies c
+      JOIN books b ON b.id = c.book_id
+      LEFT JOIN borrowers u ON u.id = c.borrower_user_id
+      WHERE c.copy_code = $1
+      LIMIT 1
+    `,
     [copyId],
   );
 
@@ -1246,14 +1328,118 @@ export async function returnBorrowing(copyId: string) {
       `,
       [copyId, row.borrower_user_id, row.loan_date],
     );
+
+    if (row.status === 'Overdue') {
+      await pool.query(
+        `
+          UPDATE borrowers
+          SET overdue_events = overdue_events + 1, updated_at = NOW()
+          WHERE id = $1
+        `,
+        [row.borrower_user_id],
+      );
+    }
   }
+
+  await createNotification({
+    type: 'circulation',
+    title: 'Book returned',
+    message: `${row.borrower_name ?? 'A borrower'} returned ${row.book_title ?? copyId}.`,
+    link: '/borrowing',
+  }).catch(() => undefined);
+
+  return getBorrowings();
+}
+
+export async function renewBorrowing(copyId: string) {
+  const currentBorrowing = await pool.query<{
+    borrower_user_id: number | null;
+    due_date: string | null;
+    status: string;
+    borrower_name: string | null;
+    book_title: string | null;
+  }>(
+    `
+      SELECT
+        c.borrower_user_id,
+        c.due_date,
+        c.status,
+        b.title AS book_title,
+        u.full_name AS borrower_name
+      FROM book_copies c
+      JOIN books b ON b.id = c.book_id
+      LEFT JOIN borrowers u ON u.id = c.borrower_user_id
+      WHERE c.copy_code = $1
+      LIMIT 1
+    `,
+    [copyId],
+  );
+
+  const row = currentBorrowing.rows[0];
+
+  if (!row) {
+    throw new Error('Borrowing copy not found.');
+  }
+
+  if (row.status === 'Available' || !row.borrower_user_id) {
+    throw new Error('Only borrowed copies can be renewed.');
+  }
+
+  const nextDueDate = addDaysToIsoDate(row.due_date, 14);
+
+  await pool.query(
+    `
+      UPDATE book_copies
+      SET
+        due_date = $2,
+        status = 'Borrowed',
+        updated_at = NOW()
+      WHERE copy_code = $1
+    `,
+    [copyId, nextDueDate],
+  );
+
+  await pool.query(
+    `
+      UPDATE loan_history
+      SET due_date = $3
+      WHERE copy_code = $1
+        AND borrower_user_id = $2
+        AND status = 'Borrowed'
+        AND returned_date IS NULL
+    `,
+    [copyId, row.borrower_user_id, nextDueDate],
+  );
+
+  await createNotification({
+    type: 'circulation',
+    title: 'Loan renewed',
+    message: `${row.borrower_name ?? 'A borrower'} renewed ${row.book_title ?? copyId}.`,
+    link: '/borrowing',
+  }).catch(() => undefined);
 
   return getBorrowings();
 }
 
 export async function deleteBorrowing(copyId: string) {
-  const copyResult = await pool.query<{ borrower_user_id: number | null; loan_date: string | null }>(
-    'SELECT borrower_user_id, loan_date FROM book_copies WHERE copy_code = $1',
+  const copyResult = await pool.query<{
+    borrower_user_id: number | null;
+    loan_date: string | null;
+    borrower_name: string | null;
+    book_title: string | null;
+  }>(
+    `
+      SELECT
+        c.borrower_user_id,
+        c.loan_date,
+        u.full_name AS borrower_name,
+        b.title AS book_title
+      FROM book_copies c
+      JOIN books b ON b.id = c.book_id
+      LEFT JOIN borrowers u ON u.id = c.borrower_user_id
+      WHERE c.copy_code = $1
+      LIMIT 1
+    `,
     [copyId],
   );
 
@@ -1288,7 +1474,64 @@ export async function deleteBorrowing(copyId: string) {
     );
   }
 
+  await createNotification({
+    type: 'circulation',
+    title: 'Circulation record removed',
+    message: `${currentCopy.book_title ?? copyId} was cleared from circulation for ${currentCopy.borrower_name ?? 'a borrower'}.`,
+    link: '/borrowing',
+  }).catch(() => undefined);
+
   return { deleted: true, reason: null };
+}
+
+export async function payFineRecord(userId: number, fineId: string) {
+  const fineResult = await pool.query<FineRow>(
+    'SELECT * FROM fine_records WHERE id = $1 AND user_id = $2 LIMIT 1',
+    [fineId, userId],
+  );
+
+  const fine = fineResult.rows[0];
+
+  if (!fine) {
+    throw new Error('Fine record not found.');
+  }
+
+  if (fine.amount_owed_rwf <= 0) {
+    return serializeFine(fine);
+  }
+
+  await pool.query(
+    `
+      UPDATE fine_records
+      SET amount_owed_rwf = 0
+      WHERE id = $1 AND user_id = $2
+    `,
+    [fineId, userId],
+  );
+
+  await pool.query(
+    `
+      UPDATE borrowers
+      SET
+        total_fines_paid_rwf = total_fines_paid_rwf + $2,
+        total_fines_owed_rwf = GREATEST(total_fines_owed_rwf - $2, 0),
+        updated_at = NOW()
+      WHERE id = $1
+    `,
+    [userId, fine.amount_owed_rwf],
+  );
+
+  await createNotification({
+    type: 'fine',
+    title: 'Fine paid',
+    message: `A fine payment of RWF ${fine.amount_owed_rwf.toLocaleString()} was recorded.`,
+    link: `/users/${userId}/profile`,
+  }).catch(() => undefined);
+
+  return {
+    ...serializeFine(fine),
+    amountOwedRwf: 0,
+  };
 }
 
 export async function getUserProfile(userId: number) {
@@ -1355,6 +1598,7 @@ export async function getUserProfile(userId: number) {
         h.fine_rwf,
         u.id AS borrower_id,
         u.full_name AS borrower_name,
+        u.primary_email AS borrower_email,
         u.roll AS borrower_roll,
         u.student_id AS borrower_student_id,
         u.class_name AS borrower_class_name,

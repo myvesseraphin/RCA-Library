@@ -9,12 +9,6 @@ export type SeedUser = {
   name: string;
   firstName: string;
   lastName: string;
-  fatherName: string;
-  motherName: string;
-  fatherOccupation: string;
-  motherOccupation: string;
-  dob: string | null;
-  religion: string;
   classLevel: string;
   section: string;
   className: string;
@@ -22,13 +16,8 @@ export type SeedUser = {
   studentId: string;
   admissionDate: string | null;
   primaryPhone: string;
-  secondaryPhone: string;
   primaryEmail: string;
-  secondaryEmail: string;
   address: string;
-  streetAddress: string;
-  houseName: string;
-  houseNumber: string;
   borrowScore: number;
   lifetimeBorrowed: number;
   overdueEvents: number;

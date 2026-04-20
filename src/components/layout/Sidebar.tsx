@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import {
+  Bell,
   Book,
   Home,
   Library,
@@ -22,6 +23,7 @@ const navItems: NavItem[] = [
   { name: 'Users', path: '/users', icon: Users },
   { name: 'Library', path: '/library', icon: Library },
   { name: 'Borrowing', path: '/borrowing', icon: Book },
+  { name: 'Notifications', path: '/notifications', icon: Bell },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
@@ -30,7 +32,7 @@ export function Sidebar() {
     <aside className="w-64 bg-white border-r border-gray-100 h-screen flex flex-col fixed left-0 top-0 overflow-y-auto hidden md:flex pb-6 custom-scrollbar">
       <div className="p-6 pb-2">
         <Link to="/dashboard">
-          <BrandLogo imageClassName="h-9" titleClassName="text-xl" />
+          <BrandLogo imageClassName="h-9" titleClassName="text-xl font-bold text-black" />
         </Link>
       </div>
 
