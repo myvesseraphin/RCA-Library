@@ -180,6 +180,11 @@ function buildPasswordResetEmailHtml(name: string, code: string) {
   const safeCode = escapeHtml(code);
   const safeMinutes = escapeHtml(String(config.resetCodeTtlMinutes));
   const supportEmail = escapeHtml(buildFromAddress().replace(/^.*<([^>]+)>.*$/, '$1') || config.smtpUser || config.resendFromEmail || '');
+  const brandImageUrl = getEmailBrandImageUrl();
+
+  const logoMarkup = brandImageUrl
+    ? `<tr><td align="center" style="padding-bottom:26px;"><img src="${escapeHtml(brandImageUrl)}" alt="Library Logo" width="80" height="80" fetchpriority="high" style="display:block;width:80px;height:80px;border-radius:16px;object-fit:cover;border:0;" /></td></tr>`
+    : '';
 
   return `<!doctype html>
 <html lang="en">
@@ -196,13 +201,7 @@ function buildPasswordResetEmailHtml(name: string, code: string) {
       <tr>
         <td align="center" style="padding:48px 16px 56px;">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;max-width:720px;">
-            <tr>
-              <td align="center" style="padding-bottom:20px;">
-                <div style="font-size:40px;line-height:1;font-weight:700;letter-spacing:-0.03em;color:#111827;">
-                  RCA Library System
-                </div>
-              </td>
-            </tr>
+            ${logoMarkup}
             <tr>
               <td align="center" style="padding-bottom:20px;">
                 <div style="font-size:18px;line-height:28px;color:#6b7280;">Hello ${safeName},</div>
