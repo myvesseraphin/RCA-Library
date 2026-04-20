@@ -1,38 +1,58 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, ChevronDown, Trash2, Edit3, Plus, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-const usersData = [
-  { id: 1, name: 'Eleanor Pena', roll: '#01', address: 'TA-107 Newyork', class: '01', dob: '02/05/2001', phone: '+123 6988567', avatar: 'https://picsum.photos/seed/eleanor/100/100' },
-  { id: 2, name: 'Jessia Rose', roll: '#10', address: 'TA-107 Newyork', class: '02', dob: '03/04/2000', phone: '+123 8988569', avatar: 'https://picsum.photos/seed/jessia/100/100', selected: true },
-  { id: 3, name: 'Jenny Wilson', roll: '#04', address: 'Australia, Sydney', class: '01', dob: '12/05/2001', phone: '+123 7988566', avatar: 'https://picsum.photos/seed/jenny/100/100' },
-  { id: 4, name: 'Guy Hawkins', roll: '#03', address: 'Australia, Sydney', class: '02', dob: '03/05/2001', phone: '+123 5988565', avatar: 'https://picsum.photos/seed/guy/100/100' },
-  { id: 5, name: 'Jacob Jones', roll: '#15', address: 'Australia, Sydney', class: '04', dob: '12/05/2001', phone: '+123 9988568', avatar: 'https://picsum.photos/seed/jacob/100/100' },
-  { id: 6, name: 'Jacob Jones', roll: '#15', address: 'Australia, Sydney', class: '04', dob: '12/05/2001', phone: '+123 9988568', avatar: 'https://picsum.photos/seed/jacob2/100/100' },
-  { id: 7, name: 'Jane Cooper', roll: '#01', address: 'Australia, Sydney', class: '04', dob: '12/03/2001', phone: '+123 6988566', avatar: 'https://picsum.photos/seed/jane/100/100' },
-  { id: 8, name: 'Floyd Miles', roll: '#11', address: 'TA-107 Newyork', class: '01', dob: '03/05/2002', phone: '+123 5988569', avatar: 'https://picsum.photos/seed/floyd/100/100' },
-  { id: 9, name: 'Floyd Miles', roll: '#11', address: 'TA-107 Newyork', class: '01', dob: '03/05/2002', phone: '+123 5988569', avatar: 'https://picsum.photos/seed/floyd2/100/100' },
-];
+import { InitialAvatar } from '../components/ui/InitialAvatar';
+import type { SeedUser } from '../lib/seed';
+import { api } from '../lib/api';
 
 export function Users() {
-  const [users, setUsers] = useState(usersData);
-  const [recordToDelete, setRecordToDelete] = useState<(typeof usersData)[0] | null>(null);
+  const [users, setUsers] = useState<SeedUser[]>([]);
+  const [recordToDelete, setRecordToDelete] = useState<SeedUser | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let active = true;
+
+    api.getUsers()
+      .then((items) => {
+        if (active) {
+          setUsers(items);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setError(reason instanceof Error ? reason.message : 'Unable to load users.');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const toggleSelect = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    setUsers(users.map(s => s.id === id ? { ...s, selected: !s.selected } : s));
+    setUsers((current) => current.map((user) => user.id === id ? { ...user, selected: !user.selected } : user));
   };
 
-  const handleDeleteClick = (record: typeof usersData[0], e: React.MouseEvent) => {
+  const handleDeleteClick = (record: SeedUser, e: React.MouseEvent) => {
     e.stopPropagation();
     setRecordToDelete(record);
   };
 
-  const confirmDelete = () => {
-    if (recordToDelete) {
-      setUsers(users.filter(s => s.id !== recordToDelete.id));
+  const confirmDelete = async () => {
+    if (!recordToDelete) {
+      return;
+    }
+
+    try {
+      await api.deleteUser(recordToDelete.id);
+      setUsers((current) => current.filter((user) => user.id !== recordToDelete.id));
       setRecordToDelete(null);
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to delete that user.');
     }
   };
 
@@ -42,8 +62,12 @@ export function Users() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Users List</h1>
           <p className="text-gray-500 text-sm">Home <span className="mx-1">/</span> <span className="font-medium text-gray-700">Users</span></p>
+          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
         </div>
-        <button className="bg-white border text-brand-primary border-brand-primary font-medium px-4 py-2.5 rounded-lg flex items-center gap-2 hover:bg-brand-secondary transition-colors">
+        <button
+          onClick={() => navigate('/users/new')}
+          className="bg-white border text-brand-primary border-brand-primary font-medium px-4 py-2.5 rounded-lg flex items-center gap-2 hover:bg-brand-secondary transition-colors"
+        >
           <Plus className="w-5 h-5" />
           Add User
         </button>
@@ -87,7 +111,7 @@ export function Users() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {users.map((student) => (
+              {users.length > 0 ? users.map((student) => (
                 <tr 
                   key={student.id} 
                   onClick={() => navigate(`/users/${student.id}/profile`)}
@@ -103,15 +127,15 @@ export function Users() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <img src={student.avatar} alt={student.name} className="w-8 h-8 rounded-full object-cover" referrerPolicy="no-referrer" />
+                      <InitialAvatar name={student.name} className="w-8 h-8 text-xs" />
                       <span className="font-semibold text-gray-800 text-sm">{student.name}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600 font-medium">{student.roll}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{student.address}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600 font-medium">{student.class}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600 font-medium">{student.className}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{student.dob}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{student.phone}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{student.primaryPhone}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-2">
                       <button 
@@ -129,7 +153,13 @@ export function Users() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
+                    No borrowers yet. Create the first user to start managing the library.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -168,7 +198,7 @@ export function Users() {
             <div className="p-6">
               <p className="text-[15px] text-gray-800 leading-relaxed mb-6">
                 Are you sure you want to delete the user record for 
-                '{recordToDelete.name}' (Class {recordToDelete.class})? 
+                '{recordToDelete.name}' (Class {recordToDelete.className})? 
                 This action cannot be undone.
               </p>
             </div>

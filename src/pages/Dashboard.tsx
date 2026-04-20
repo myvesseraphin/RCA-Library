@@ -1,48 +1,60 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Users, BookOpen, BookCheck, Bell, CheckCircle2, Search, ArrowUpRight, MoreHorizontal } from 'lucide-react';
+import { Users, BookOpen, Bell, CheckCircle2, ArrowUpRight, MoreHorizontal } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { InitialAvatar } from '../components/ui/InitialAvatar';
+import { api, type DashboardData } from '../lib/api';
 
-const attendanceData = [
-  { name: 'Mon', value: 15 },
-  { name: 'Tue', value: 45 },
-  { name: 'Wed', value: 30 },
-  { name: 'Tue', value: 60 },
-  { name: 'Wed', value: 70 },
-  { name: 'Thu', value: 40 },
-  { name: 'Fri', value: 87 },
-  { name: 'Sat', value: 85 },
-  { name: 'Sun', value: 50 },
-  { name: 'Mon', value: 90 },
-];
-
-const borrowingData = [
-  { name: 'Mathematics', value: 180 },
-  { name: 'English', value: 150 },
-  { name: 'Physics', value: 140 },
-  { name: 'English', value: 110 },
-  { name: 'Literature', value: 105 },
-  { name: 'English', value: 75 },
-  { name: 'Others', value: 40 },
-];
+const statIcons = [Users, Users, BookOpen, Bell];
 
 export function Dashboard() {
+  const navigate = useNavigate();
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    api.getDashboard()
+      .then((data) => {
+        if (active) {
+          setDashboardData(data);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setError(reason instanceof Error ? reason.message : 'Unable to load the dashboard.');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (!dashboardData) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-4">
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-sm text-gray-500">{error ?? 'Loading dashboard data...'}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Welcome to Library Management System</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Welcome back, {dashboardData.welcomeName}!</h1>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Stat Cards */}
-        {[
-          { label: 'Total Students', value: '1,250', trend: '+5%', icon: Users, bg: 'bg-purple-50', text: 'text-purple-600' },
-          { label: 'Total Teachers', value: '75', trend: null, icon: Users, bg: 'bg-purple-50', text: 'text-purple-600' },
-          { label: 'Library Books', value: '5,100', trend: '+5%', icon: BookOpen, bg: 'bg-gray-50', text: 'text-purple-600' },
-          { label: 'Pending Notices', value: '4', trend: null, icon: Bell, bg: 'bg-gray-50', text: 'text-purple-600' },
-        ].map((stat, i) => (
+        {dashboardData.stats.map((stat, i) => {
+          const Icon = statIcons[i];
+
+          return (
           <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100/50 flex flex-col justify-between items-start">
             <div className={`p-3 rounded-xl mb-4 ${stat.bg}`}>
-              <stat.icon className={`w-6 h-6 ${stat.text}`} />
+              <Icon className={`w-6 h-6 ${stat.text}`} />
             </div>
             <div>
                <h3 className="text-gray-500 text-sm mb-1 font-medium">{stat.label}</h3>
@@ -57,7 +69,7 @@ export function Dashboard() {
                </div>
             </div>
           </div>
-        ))}
+        )})}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -71,7 +83,7 @@ export function Dashboard() {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={attendanceData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+              <AreaChart data={dashboardData.attendanceTrend} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6D28D9" stopOpacity={0.2}/>
@@ -101,7 +113,7 @@ export function Dashboard() {
           </div>
           <div className="h-64">
              <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={borrowingData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} barSize={32}>
+              <BarChart data={dashboardData.topBorrowedCategories} margin={{ top: 10, right: 0, left: -20, bottom: 0 }} barSize={32}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} dy={10} interval={0} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} />
@@ -132,34 +144,40 @@ export function Dashboard() {
                     <th className="pb-3 font-medium">Name</th>
                     <th className="pb-3 font-medium">ID</th>
                     <th className="pb-3 font-medium">Percent</th>
-                    <th className="pb-3 font-medium">Year</th>
+                    <th className="pb-3 font-medium">Class</th>
                  </tr>
                </thead>
                <tbody className="divide-y divide-gray-50">
-                  {[
-                    { id: 1, name: 'Evelyn Harper', studentId: 'PRE43178', percent: '98%', year: '2014', avatar: 'https://picsum.photos/seed/ev1/100/100', checked: false },
-                    { id: 2, name: 'Diana Plenty', studentId: 'PRE43174', percent: '91%', year: '2014', avatar: 'https://picsum.photos/seed/di1/100/100', checked: true },
-                    { id: 3, name: 'John Millar', studentId: 'PRE43187', percent: '92%', year: '2014', avatar: 'https://picsum.photos/seed/jo1/100/100', checked: false },
-                  ].map((student) => (
-                    <tr key={student.id} className={`${student.checked ? 'bg-brand-primary/5' : ''}`}>
+                  {dashboardData.recentBorrowers.length > 0 ? dashboardData.recentBorrowers.map((student) => (
+                    <tr
+                      key={student.id}
+                      className={`${student.selected ? 'bg-brand-primary/5' : ''} cursor-pointer`}
+                      onClick={() => navigate(`/users/${student.id}/profile`)}
+                    >
                        <td className="py-3">
-                         <div className={`w-4 h-4 border-2 rounded flex items-center justify-center transition-colors ${student.checked ? 'border-brand-primary bg-brand-primary' : 'border-gray-300'}`}>
-                           {student.checked && (
+                         <div className={`w-4 h-4 border-2 rounded flex items-center justify-center transition-colors ${student.selected ? 'border-brand-primary bg-brand-primary' : 'border-gray-300'}`}>
+                           {student.selected && (
                              <svg viewBox="0 0 24 24" fill="none" className="w-2.5 h-2.5 text-white" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                            )}
                          </div>
                        </td>
                        <td className="py-3">
                          <div className="flex items-center gap-2">
-                           <img src={student.avatar} alt={student.name} className="w-7 h-7 rounded-full object-cover" referrerPolicy="no-referrer" />
+                           <InitialAvatar name={student.name} className="w-7 h-7 text-[11px]" />
                            <span className="font-semibold text-gray-800">{student.name}</span>
                          </div>
                        </td>
                        <td className="py-3 text-gray-600">{student.studentId}</td>
                        <td className="py-3 text-gray-600">{student.percent}</td>
-                       <td className="py-3 text-gray-600">{student.year}</td>
+                       <td className="py-3 text-gray-600">{student.className}</td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-sm text-gray-500">
+                        No borrowers yet. Add users to see activity here.
+                      </td>
+                    </tr>
+                  )}
                </tbody>
              </table>
           </div>
@@ -174,15 +192,15 @@ export function Dashboard() {
             </div>
           </div>
           <div className="space-y-4">
-            <button className="w-full py-3 px-4 border text-brand-primary font-medium border-brand-primary/20 rounded-xl hover:bg-brand-secondary transition-colors text-center">
-              Add User
-            </button>
-            <button className="w-full py-3 px-4 border text-brand-primary font-medium border-brand-primary/20 rounded-xl hover:bg-brand-secondary transition-colors text-center">
-              Check-out Book
-            </button>
-            <button className="w-full py-3 px-4 border text-brand-primary font-medium border-brand-primary/20 rounded-xl hover:bg-brand-secondary transition-colors text-center">
-              New Notice
-            </button>
+            {dashboardData.quickActions.map((action) => (
+              <button
+                key={action.id}
+                onClick={() => navigate(action.path)}
+                className="w-full py-3 px-4 border text-brand-primary font-medium border-brand-primary/20 rounded-xl hover:bg-brand-secondary transition-colors text-center"
+              >
+                {action.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>

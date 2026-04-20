@@ -1,51 +1,74 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, ChevronDown, Trash2, Edit3, Plus, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-const libraryData = [
-  { id: 1, name: 'Literature', writer: 'Wade Warren', bookId: '#0011', subject: 'English', class: '02', publishDate: '22 Octo, 2022', cover: 'https://picsum.photos/seed/book1/60/80', bgColor: 'bg-teal-50' },
-  { id: 2, name: 'Mathematics', writer: 'David Morgan', bookId: '#0021', subject: 'Mathematics', class: '01', publishDate: '12 Sep, 2023', cover: 'https://picsum.photos/seed/book2/60/80', bgColor: 'bg-indigo-50', selected: true },
-  { id: 3, name: 'English', writer: 'Kristin Watson', bookId: '#0031', subject: 'Physics', class: '03', publishDate: '23 Nov, 2020', cover: 'https://picsum.photos/seed/book3/60/80', bgColor: 'bg-orange-50' },
-  { id: 4, name: 'Mathematics', writer: 'Savannah Nguyen', bookId: '#0013', subject: 'Mathematics', class: '04', publishDate: '12 Octo, 2022', cover: 'https://picsum.photos/seed/book4/60/80', bgColor: 'bg-pink-50' },
-  { id: 5, name: 'English', writer: 'Jacob Jones', bookId: '#0018', subject: 'Physics', class: '01', publishDate: '22 Octo, 2022', cover: 'https://picsum.photos/seed/book5/60/80', bgColor: 'bg-purple-50' },
-  { id: 6, name: 'Mathematics', writer: 'Arlene McCoy', bookId: '#0019', subject: 'Literature', class: '02', publishDate: '23 Sep, 2023', cover: 'https://picsum.photos/seed/book6/60/80', bgColor: 'bg-blue-50' },
-  { id: 7, name: 'Mathematics', writer: 'Arlene McCoy', bookId: '#0019', subject: 'Literature', class: '02', publishDate: '23 Sep, 2023', cover: 'https://picsum.photos/seed/book7/60/80', bgColor: 'bg-blue-50' },
-  { id: 8, name: 'Mathematics', writer: 'Arlene McCoy', bookId: '#0019', subject: 'Literature', class: '02', publishDate: '23 Sep, 2023', cover: 'https://picsum.photos/seed/book8/60/80', bgColor: 'bg-blue-50' },
-  { id: 9, name: 'English', writer: 'Jacob Jones', bookId: '#0018', subject: 'Physics', class: '01', publishDate: '22 Octo, 2022', cover: 'https://picsum.photos/seed/book9/60/80', bgColor: 'bg-red-50' },
-];
+import type { SeedBook } from '../lib/seed';
+import { api } from '../lib/api';
 
 export function Library() {
-  const [books, setBooks] = useState(libraryData);
-  const [recordToDelete, setRecordToDelete] = useState<(typeof libraryData)[0] | null>(null);
+  const [books, setBooks] = useState<SeedBook[]>([]);
+  const [recordToDelete, setRecordToDelete] = useState<SeedBook | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let active = true;
+
+    api.getBooks()
+      .then((items) => {
+        if (active) {
+          setBooks(items);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setError(reason instanceof Error ? reason.message : 'Unable to load books.');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const toggleSelect = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    setBooks(books.map(b => b.id === id ? { ...b, selected: !b.selected } : b));
+    setBooks((current) => current.map((book) => book.id === id ? { ...book, selected: !book.selected } : book));
   };
 
-  const handleDeleteClick = (record: typeof libraryData[0], e: React.MouseEvent) => {
+  const handleDeleteClick = (record: SeedBook, e: React.MouseEvent) => {
     e.stopPropagation();
     setRecordToDelete(record);
   };
 
-  const confirmDelete = () => {
-    if (recordToDelete) {
-      setBooks(books.filter(b => b.id !== recordToDelete.id));
+  const confirmDelete = async () => {
+    if (!recordToDelete) {
+      return;
+    }
+
+    try {
+      await api.deleteBook(recordToDelete.id);
+      setBooks((current) => current.filter((book) => book.id !== recordToDelete.id));
       setRecordToDelete(null);
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to delete that book.');
     }
   };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
        <div className="flex justify-between items-end mb-2">
-        <div>
+       <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Library</h1>
           <p className="text-gray-500 text-sm">Home <span className="mx-1">/</span> <span className="font-medium text-gray-700">Library Books</span></p>
+          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
         </div>
-        <button className="bg-white border text-brand-primary border-brand-primary font-medium px-4 py-2.5 rounded-lg flex items-center gap-2 hover:bg-brand-secondary transition-colors">
+        <button
+          onClick={() => navigate('/library/new/edit')}
+          className="bg-white border text-brand-primary border-brand-primary font-medium px-4 py-2.5 rounded-lg flex items-center gap-2 hover:bg-brand-secondary transition-colors"
+        >
           <Plus className="w-5 h-5" />
-          Add Library
+          Add Book
         </button>
       </div>
 
@@ -87,7 +110,7 @@ export function Library() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {books.map((book) => (
+              {books.length > 0 ? books.map((book) => (
                 <tr 
                   key={book.id} 
                   className={`hover:bg-gray-50/50 transition-colors cursor-pointer ${book.selected ? 'bg-brand-primary/5' : ''}`}
@@ -103,16 +126,16 @@ export function Library() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center overflow-hidden border border-gray-100 ${book.bgColor}`}>
-                        <img src={book.cover} alt={book.name} className="w-8 h-8 object-cover rounded-sm shadow-sm" referrerPolicy="no-referrer" />
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border border-gray-100 bg-gray-50">
+                        <img src={book.cover} alt={book.title} className="w-full h-full object-cover shadow-sm" />
                       </div>
-                      <span className="font-semibold text-gray-800 text-sm">{book.name}</span>
+                      <span className="font-semibold text-gray-800 text-sm">{book.title}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600 font-medium">{book.writer}</td>
                   <td className="px-6 py-4 text-sm text-gray-600 font-medium">{book.bookId}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{book.subject}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600 font-medium">{book.class}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600 font-medium">{book.className}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{book.publishDate}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-2">
@@ -131,7 +154,13 @@ export function Library() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
+                    No books yet. Add the first book.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -170,7 +199,7 @@ export function Library() {
             <div className="p-6">
               <p className="text-[15px] text-gray-800 leading-relaxed mb-6">
                 Are you sure you want to delete the library record for 
-                '{recordToDelete.name}' by {recordToDelete.writer} (ID {recordToDelete.bookId})? 
+                '{recordToDelete.title}' by {recordToDelete.writer} (ID {recordToDelete.bookId})? 
                 This action cannot be undone.
               </p>
             </div>

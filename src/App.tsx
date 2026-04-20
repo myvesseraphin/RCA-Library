@@ -12,29 +12,63 @@ import { UserDetails } from './pages/UserDetails';
 import { UserProfile } from './pages/UserProfile';
 import { Library } from './pages/Library';
 import { BookDetails } from './pages/BookDetails';
-import { Analytics } from './pages/Analytics';
 import { Borrowing } from './pages/Borrowing';
 import { BookHistory } from './pages/BookHistory';
 import { BookEdit } from './pages/BookEdit';
+import { LoginPage } from './pages/LoginPage';
+import { Settings } from './pages/Settings';
+import { AuthProvider, useAuth } from './lib/auth';
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-brand-bg flex items-center justify-center text-sm text-brand-muted">
+        Loading workspace...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
 
 export default function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<AppLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="users" element={<Users />} />
-          <Route path="users/:id/details" element={<UserDetails />} />
-          <Route path="users/:id/profile" element={<UserProfile />} />
-          <Route path="library" element={<Library />} />
-          <Route path="library/:id/details" element={<BookDetails />} />
-          <Route path="library/:id/history" element={<BookHistory />} />
-          <Route path="library/:id/edit" element={<BookEdit />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="borrowing" element={<Borrowing />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </Router>
+    <AuthProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/login" element={<LoginPage />} />
+
+          <Route
+            element={(
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            )}
+          >
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="users" element={<Users />} />
+            <Route path="users/new" element={<UserDetails />} />
+            <Route path="users/:id/details" element={<UserDetails />} />
+            <Route path="users/:id/profile" element={<UserProfile />} />
+            <Route path="library" element={<Library />} />
+            <Route path="library/new/edit" element={<BookEdit />} />
+            <Route path="library/:id/details" element={<BookDetails />} />
+            <Route path="library/:id/history" element={<BookHistory />} />
+            <Route path="library/:id/edit" element={<BookEdit />} />
+            <Route path="borrowing" element={<Borrowing />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }

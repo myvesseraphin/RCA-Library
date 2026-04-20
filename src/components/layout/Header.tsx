@@ -1,7 +1,18 @@
 import React from 'react';
-import { Search, Bell, MessageSquare, ChevronDown } from 'lucide-react';
+import { Search, Bell, MessageSquare, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { InitialAvatar } from '../ui/InitialAvatar';
+import { useAuth } from '../../lib/auth';
 
 export function Header() {
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
+
   return (
     <header className="h-20 bg-white sticky top-0 z-10 flex items-center justify-between px-8 border-b border-gray-100">
       <div className="flex-1 max-w-xl relative">
@@ -24,19 +35,22 @@ export function Header() {
           <MessageSquare className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 px-2.5 py-1.5 rounded-full transition-colors">
-          <img
-            src="https://picsum.photos/seed/priscilla/100/100"
-            alt="Priscilla Lily"
-            className="w-10 h-10 rounded-full object-cover"
-            referrerPolicy="no-referrer"
-          />
+        <div className="flex items-center gap-3 px-2.5 py-1.5 rounded-full transition-colors">
+          <InitialAvatar name={user?.name ?? 'Library Staff'} className="h-10 w-10 text-sm" />
           <div className="hidden sm:block">
-            <p className="text-sm font-semibold text-gray-800">Priscilla Lily</p>
-            <p className="text-xs text-gray-500">Admin</p>
+            <p className="text-sm font-semibold text-gray-800">{user?.name ?? 'Library Staff'}</p>
+            <p className="text-xs text-gray-500">{user?.role ?? 'Librarian'}</p>
           </div>
-          <ChevronDown className="w-4 h-4 text-gray-400" />
         </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-brand-primary"
+        >
+          <LogOut className="w-4 h-4" />
+          Logout
+        </button>
       </div>
     </header>
   );
