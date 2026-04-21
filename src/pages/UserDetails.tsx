@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { InitialAvatar } from '../components/ui/InitialAvatar';
-import { PageLoader } from '../components/ui/PageLoader';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { api, type UserMutationPayload } from '../lib/api';
 import { useNotifications } from '../lib/notifications';
 import { useToast } from '../lib/toast';
 import { toDateInputValue } from '../lib/utils';
 
-function createEmptyFormData(): UserMutationPayload {
+type UserFormData = UserMutationPayload;
+
+function createEmptyFormData(): UserFormData {
   return {
     firstName: '',
     lastName: '',
@@ -20,8 +20,6 @@ function createEmptyFormData(): UserMutationPayload {
     address: '',
   };
 }
-
-type UserFormData = UserMutationPayload;
 
 export function UserDetails() {
   const { id } = useParams();
@@ -88,11 +86,10 @@ export function UserDetails() {
   const handleSubmit = async () => {
     try {
       setIsSaving(true);
-
       if (isCreateMode) {
         const createdUser = await api.createUser(formData);
         await refresh();
-        toast.success('Borrower created successfully.');
+        toast.success('User created successfully.');
         navigate(`/users/${createdUser.id}/details`, { replace: true });
         return;
       }
@@ -112,112 +109,101 @@ export function UserDetails() {
       });
       setStudentId(updatedUser.studentId);
       setIsEditing(false);
-      toast.success('Borrower details updated.');
+      toast.success('User details updated.');
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : 'Unable to save this borrower.');
+      toast.error(reason instanceof Error ? reason.message : 'Unable to save these details.');
     } finally {
       setIsSaving(false);
     }
   };
 
   if (isLoading) {
-    return <PageLoader />;
+    return <div className="p-8 text-center text-gray-500">Loading...</div>;
   }
 
-  const fullName = `${formData.firstName} ${formData.lastName}`.trim() || 'Borrower';
-  const canEdit = isCreateMode || isEditing;
+  const fullName = `${formData.firstName} ${formData.lastName}`.trim() || '-';
 
   return (
     <div className="page-shell">
-      <div className="mb-2">
-        <h1 className="mb-1 text-2xl font-bold text-gray-900">{isCreateMode ? 'Create Borrower' : 'Borrower Details'}</h1>
-        <p className="text-sm text-gray-500">
-          {isCreateMode ? 'Add a new library borrower.' : 'View and edit the essential borrower profile fields.'}
-        </p>
+      <div>
+        <h1 className="text-[22px] font-bold text-gray-900 mb-1">Students Details</h1>
+        <div className="flex items-center text-[13px]">
+          <Link to="/users" className="text-gray-400 hover:text-gray-600">Students</Link>
+          <span className="mx-2 text-gray-300">/</span>
+          <span className="text-gray-800 font-medium">Students details</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="showcase-card px-8 py-6">
-          <div className="mb-6 flex justify-between">
-            <h2 className="text-[17px] font-bold text-gray-900">About Me</h2>
-            {canEdit && (
-              <button onClick={() => setIsEditing(false)} className="text-gray-400 font-bold tracking-widest leading-none">...</button>
-            )}
-          </div>
-          
-          <div className="mb-6 flex items-center gap-4">
-            <InitialAvatar name={fullName} className="h-[52px] w-[52px] text-lg rounded-full" />
-            <div>
-              <h2 className="text-[15px] font-bold text-gray-900">{fullName}</h2>
-              <p className="text-[13px] text-gray-500 mt-0.5">Users</p>
+      <div className="bg-white rounded-xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] p-6 pb-8">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-[18px] font-bold text-gray-900">About Me</h2>
+          <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 text-gray-500 transition-colors">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="12" cy="5" r="1" />
+              <circle cx="12" cy="19" r="1" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* About Me Card */}
+          <div className="border border-gray-100 rounded-[10px] p-6">
+            <div className="mb-8">
+              <h3 className="text-[18px] font-bold text-gray-900">{fullName}</h3>
+              <p className="text-[14px] text-gray-500 mt-1">Users</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-7">
+              <InfoItem label="First Name" value={formData.firstName} isEditing={isEditing} onChange={(val) => handleChange('firstName', val)} />
+              <InfoItem label="Last Name" value={formData.lastName} isEditing={isEditing} onChange={(val) => handleChange('lastName', val)} />
+              <InfoItem label="Class" value={formData.classLevel} isEditing={isEditing} onChange={(val) => handleChange('classLevel', val)} placeholder="Two" />
+              <InfoItem label="Section" value={formData.section} isEditing={isEditing} onChange={(val) => handleChange('section', val)} placeholder="Red" />
+              <InfoItem label="Roll" value={formData.roll} isEditing={isEditing} onChange={(val) => handleChange('roll', val)} placeholder="5648" />
+              <InfoItem label="Admission Date" value={formData.admissionDate} isEditing={isEditing} onChange={(val) => handleChange('admissionDate', val)} placeholder="09-01-2021" type="date" />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-7">
-            <InfoItem label="First Name" value={formData.firstName} isEditing={isEditing} onChange={(value) => handleChange('firstName', value)} />
-            <InfoItem label="Last Name" value={formData.lastName} isEditing={isEditing} onChange={(value) => handleChange('lastName', value)} />
-            <InfoItem label="Class" value={formData.classLevel} isEditing={isEditing} onChange={(value) => handleChange('classLevel', value)} />
-            <InfoItem label="Section" value={formData.section} isEditing={isEditing} onChange={(value) => handleChange('section', value)} />
-            <InfoItem label="Roll" value={formData.roll} isEditing={isEditing} onChange={(value) => handleChange('roll', value)} />
-            <InfoItem label="Admission Date" value={formData.admissionDate} isEditing={isEditing} onChange={(value) => handleChange('admissionDate', value)} type="date" />
-          </div>
-        </section>
+          {/* Contact Information Card */}
+          <div className="border border-gray-100 rounded-[10px] p-6">
+            <div className="mb-8">
+              <h3 className="text-[18px] font-bold text-gray-900">Contact Information</h3>
+              <p className="text-[14px] text-gray-500 mt-1">Users</p>
+            </div>
 
-        <section className="showcase-card px-8 py-6 flex flex-col">
-          <div className="mb-6 flex justify-between">
-            <div>
-              <h2 className="text-[17px] font-bold text-gray-900">Contact Information</h2>
-              <p className="text-[13px] text-gray-500 mt-1">Users</p>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-7">
+              <InfoItem label="Primary Phone" value={formData.primaryPhone} isEditing={isEditing} onChange={(val) => handleChange('primaryPhone', val)} placeholder="(555) 123-4567" />
+              <InfoItem label="Primary Email" value={formData.primaryEmail} isEditing={isEditing} onChange={(val) => handleChange('primaryEmail', val)} placeholder="jessia12@gmail.com" type="email" />
+              <InfoItem label="Address" value={formData.address} isEditing={isEditing} onChange={(val) => handleChange('address', val)} placeholder="Springfield" />
+              <InfoItem label="Student ID" value={studentId || 'Generated after save'} isEditing={false} />
             </div>
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-7 mt-8">
-            <InfoItem label="Primary Phone" value={formData.primaryPhone} isEditing={isEditing} onChange={(value) => handleChange('primaryPhone', value)} />
-            <InfoItem label="Secondary Phone" value="" isEditing={isEditing} />
-            <InfoItem label="Primary Email" value={formData.primaryEmail} isEditing={isEditing} onChange={(value) => handleChange('primaryEmail', value)} type="email" />
-            <InfoItem label="Secondary Email" value="" isEditing={isEditing} />
-            <InfoItem label="Address" value={formData.address} isEditing={isEditing} onChange={(value) => handleChange('address', value)} />
-            <InfoItem label="Student ID" value={studentId || 'Generated after save'} isEditing={false} />
-          </div>
+        <div className="flex justify-end gap-3 mt-4">
+          <button 
+            type="button" 
+            onClick={() => {
+              if (isEditing && !isCreateMode) setIsEditing(false);
+              else if (isCreateMode) navigate('/users');
+            }}
+            className="px-6 py-2.5 text-[14px] font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            {isEditing ? 'Cancel' : 'Remove'}
+          </button>
           
-          <div className="mt-auto pt-8 flex justify-end gap-3">
-            {isEditing ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (isCreateMode) navigate('/users');
-                  else setIsEditing(false);
-                }}
-                className="reference-secondary-button border border-gray-200 bg-white px-5 py-2 text-[14px] text-gray-600 rounded-lg"
-              >
-                Cancel
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => navigate('/users')}
-                className="reference-secondary-button border border-gray-200 bg-white px-5 py-2 text-[14px] text-gray-600 rounded-lg"
-              >
-                Back
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                if (!isEditing && !isCreateMode) {
-                  setIsEditing(true);
-                  return;
-                }
-                void handleSubmit();
-              }}
-              disabled={isSaving}
-              className="reference-primary-button !bg-[#7c2fd0] text-white px-6 py-2 text-[14px] rounded-lg disabled:opacity-75"
-            >
-              {isSaving ? 'Saving...' : isEditing ? (isCreateMode ? 'Create Borrower' : 'Save Changes') : 'Edit'}
-            </button>
-          </div>
-        </section>
+          <button 
+            type="button"
+            onClick={() => {
+              if (!isEditing) setIsEditing(true);
+              else void handleSubmit();
+            }}
+            disabled={isSaving}
+            className="px-8 py-2.5 text-[14px] font-medium text-white bg-[#8B3DFF] rounded-lg hover:bg-[#7a34e0] transition-colors disabled:opacity-70"
+          >
+            {isSaving ? 'Saving...' : (isEditing ? 'Save' : 'Edit')}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -229,25 +215,28 @@ function InfoItem({
   isEditing,
   onChange,
   type = 'text',
+  placeholder = '',
 }: {
   label: string;
   value: string;
   isEditing?: boolean;
   onChange?: (val: string) => void;
   type?: string;
+  placeholder?: string;
 }) {
   return (
     <div>
-      <p className="mb-1.5 text-[12px] font-medium text-[#998baf]">{label}</p>
+      <p className="text-[13px] text-gray-400 mb-1.5">{label}</p>
       {isEditing ? (
         <input
           type={type}
           value={value}
+          placeholder={placeholder}
           onChange={(event) => onChange?.(event.target.value)}
-          className="w-full rounded border border-gray-200 px-2 py-1.5 text-[13px] font-semibold text-[#251f30] focus:border-[#7c2fd0] focus:outline-none"
+          className="w-[90%] rounded-md border border-gray-200 px-3 py-1.5 text-[15px] font-medium text-gray-900 focus:border-[#8B3DFF] focus:outline-none focus:ring-1 focus:ring-[#8B3DFF]"
         />
       ) : (
-        <p className="flex items-center text-[13px] font-semibold text-[#251f30]">{value || '-'}</p>
+        <p className="text-[15px] font-medium text-gray-900 break-words pr-2">{value || placeholder}</p>
       )}
     </div>
   );

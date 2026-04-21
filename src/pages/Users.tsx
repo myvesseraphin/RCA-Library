@@ -167,7 +167,6 @@ export function Users() {
                   </td>
                   <td>
                     <div className="flex items-center gap-3 py-1">
-                      <img src={`https://i.pravatar.cc/150?u=${student.id}`} alt={student.name} className="h-8 w-8 rounded-full object-cover" />
                       <span className="font-medium text-gray-900">{student.name}</span>
                     </div>
                   </td>
@@ -231,7 +230,7 @@ export function Users() {
                 key={item}
                 type="button"
                 onClick={() => setPage(item as number)}
-                className={`w-8 h-8 flex items-center justify-center rounded-lg font-medium transition-colors ${item === page ? 'text-white bg-brand-primary' : 'text-gray-600 hover:bg-gray-50'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg font-medium transition-colors ${item === page ? 'text-white bg-[#8B3DFF]' : 'text-gray-600 hover:bg-gray-50'}`}
               >
                 {item}
               </button>

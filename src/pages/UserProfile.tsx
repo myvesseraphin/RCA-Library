@@ -154,7 +154,6 @@ export function UserProfile() {
           <p className="text-sm text-gray-500">Library / Borrower Profile</p>
         </div>
         <div className="flex items-center gap-3">
-          <InitialAvatar name={user.name} className="h-12 w-12 text-sm" />
           <div>
             <h2 className="text-base font-bold leading-tight text-gray-900">{user.name}</h2>
             <p className="text-sm text-gray-500">Class: {user.className}</p>

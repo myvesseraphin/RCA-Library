@@ -316,7 +316,44 @@ export function Borrowing() {
           </table>
         </div>
 
-
+        <div className="p-6 border-t border-gray-100 flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-1 mx-auto text-sm">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            {getVisiblePages(page, totalPages).map((item, index) => item === 'ellipsis' ? (
+              <span key={`ellipsis-${index}`} className="w-8 h-8 flex items-center justify-center text-gray-400"><MoreHorizontal className="w-4 h-4" /></span>
+            ) : (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setPage(item as number)}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg font-medium transition-colors ${item === page ? 'text-white bg-[#8B3DFF]' : 'text-gray-600 hover:bg-gray-50'}`}
+              >
+                {item}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page === totalPages}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-50"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 mx-auto sm:mx-0">
+             <button className="flex items-center gap-2 border border-gray-100 text-gray-600 bg-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+              {PAGE_SIZE} / page
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {recordToDelete ? (
@@ -384,7 +421,6 @@ export function Borrowing() {
                   onClick={() => confirmBorrow(user.id)}
                   className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50"
                 >
-                  <InitialAvatar name={user.label} className="h-8 w-8 text-[10px]" />
                   {user.label}
                 </button>
               ))}

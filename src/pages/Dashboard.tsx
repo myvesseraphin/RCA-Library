@@ -192,7 +192,6 @@ export function Dashboard() {
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-4">
                              <div className="h-4 w-4 rounded-[4px] border border-gray-200 bg-transparent"></div>
-                          <InitialAvatar name={borrower.name} className="h-8 w-8 text-[11px]" />
                           <span className="font-semibold text-[#1f152e] text-[14px]">{borrower.name}</span>
                         </div>
                       </td>

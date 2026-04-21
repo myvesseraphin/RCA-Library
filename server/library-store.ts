@@ -1160,7 +1160,11 @@ export async function createBorrowing(payload: {
   }
 
   const loanDate = parseHumanDate(payload.loanDate ?? formatDisplayDate(new Date()) ?? '') ?? new Date().toISOString().slice(0, 10);
-  const dueDate = parseHumanDate(payload.dueDate ?? '') ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const defaultDueDate = new Date();
+  defaultDueDate.setMonth(defaultDueDate.getMonth() + 3);
+  const dueDate = parseHumanDate(payload.dueDate ?? '') ?? defaultDueDate.toISOString().slice(0, 10);
+
   const client = await pool.connect();
   let borrowerName = 'Borrower';
 

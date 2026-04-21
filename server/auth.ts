@@ -182,9 +182,7 @@ function buildPasswordResetEmailHtml(name: string, code: string) {
   const supportEmail = escapeHtml(buildFromAddress().replace(/^.*<([^>]+)>.*$/, '$1') || config.smtpUser || config.resendFromEmail || '');
   const brandImageUrl = getEmailBrandImageUrl();
 
-  const logoMarkup = brandImageUrl
-    ? `<tr><td align="center" style="padding-bottom:26px;"><img src="${escapeHtml(brandImageUrl)}" alt="Library Logo" width="80" height="80" fetchpriority="high" style="display:block;width:80px;height:80px;border-radius:16px;object-fit:cover;border:0;" /></td></tr>`
-    : '';
+  const logoMarkup = '';
 
   return `<!doctype html>
 <html lang="en">

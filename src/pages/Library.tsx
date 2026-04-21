@@ -229,7 +229,7 @@ export function Library() {
                 key={item}
                 type="button"
                 onClick={() => setPage(item as number)}
-                className={`w-8 h-8 flex items-center justify-center rounded-lg font-medium transition-colors ${item === page ? 'text-white bg-brand-primary' : 'text-gray-600 hover:bg-gray-50'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg font-medium transition-colors ${item === page ? 'text-white bg-[#8B3DFF]' : 'text-gray-600 hover:bg-gray-50'}`}
               >
                 {item}
               </button>
