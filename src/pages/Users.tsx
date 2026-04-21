@@ -148,7 +148,8 @@ export function Users() {
                 <th className="font-semibold text-gray-700 bg-white">Roll</th>
                 <th className="font-semibold text-gray-700 bg-white">Address</th>
                 <th className="font-semibold text-gray-700 bg-white">Class</th>
-                <th className="font-semibold text-gray-700 bg-white">Date of Birth</th>
+                <th className="font-semibold text-gray-700 bg-white">Role</th>
+                <th className="font-semibold text-gray-700 bg-white">Gender</th>
                 <th className="font-semibold text-gray-700 bg-white">Phone</th>
                 <th className="text-center font-semibold text-gray-700 bg-white">Action</th>
               </tr>
@@ -173,7 +174,8 @@ export function Users() {
                   <td className="text-gray-500">{student.roll}</td>
                   <td className="text-gray-500">{student.address || '-'}</td>
                   <td className="text-gray-500">{student.className}</td>
-                  <td className="text-gray-500">12/05/2001</td>
+                  <td className="text-gray-500">{student.role || 'Student'}</td>
+                  <td className="text-gray-500">{student.gender || '-'}</td>
                   <td className="text-gray-500">{student.primaryPhone || '-'}</td>
                   <td>
                     <div className="flex items-center justify-center gap-4 text-[#8f829f]">

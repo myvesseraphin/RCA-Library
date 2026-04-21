@@ -49,6 +49,8 @@ export type UserMutationPayload = {
   primaryPhone: string;
   primaryEmail: string;
   address: string;
+  role: string;
+  gender: string;
 };
 
 export type BookMutationPayload = {

@@ -25,6 +25,8 @@ type UserRow = {
   total_fines_paid_rwf: number;
   total_fines_owed_rwf: number;
   is_selected: boolean;
+  role: string;
+  gender: string;
 };
 
 type BookRow = {
@@ -189,6 +191,8 @@ function serializeUser(row: UserRow) {
     totalFinesPaidRwf: row.total_fines_paid_rwf,
     totalFinesOwedRwf: row.total_fines_owed_rwf,
     selected: row.is_selected,
+    role: row.role,
+    gender: row.gender,
   };
 }
 
@@ -446,6 +450,8 @@ export async function initializeLibraryStore() {
     ALTER TABLE borrowers DROP COLUMN IF EXISTS date_of_birth;
     ALTER TABLE books ALTER COLUMN cover SET DEFAULT '';
     ALTER TABLE books ALTER COLUMN detail_cover SET DEFAULT '';
+    ALTER TABLE borrowers ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'Student';
+    ALTER TABLE borrowers ADD COLUMN IF NOT EXISTS gender TEXT NOT NULL DEFAULT '';
   `);
 
   await ensureAdminUser();
@@ -605,10 +611,12 @@ export async function createUser(payload: Record<string, unknown>) {
           lifetime_borrowed,
           total_fines_paid_rwf,
           total_fines_owed_rwf,
-          is_selected
+          is_selected,
+          role,
+          gender
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-          $11, $12, 0, 0, 0, 0, FALSE
+          $11, $12, 0, 0, 0, 0, FALSE, $13, $14
         )
         RETURNING *
       `,
@@ -625,6 +633,8 @@ export async function createUser(payload: Record<string, unknown>) {
         normalizeText(payload.primaryPhone),
         normalizeText(payload.primaryEmail),
         normalizeText(payload.address),
+        normalizeText(payload.role) || 'Student',
+        normalizeText(payload.gender),
       ],
     );
 
@@ -684,6 +694,8 @@ export async function updateUserById(userId: number, payload: Record<string, unk
         primary_phone = $10,
         primary_email = $11,
         address = $12,
+        role = $13,
+        gender = $14,
         updated_at = NOW()
       WHERE id = $1
       RETURNING *
@@ -701,6 +713,8 @@ export async function updateUserById(userId: number, payload: Record<string, unk
       normalizeText(payload.primaryPhone),
       normalizeText(payload.primaryEmail),
       normalizeText(payload.address),
+      normalizeText(payload.role) || 'Student',
+      normalizeText(payload.gender),
     ],
   );
 

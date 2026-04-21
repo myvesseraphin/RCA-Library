@@ -24,6 +24,8 @@ export type SeedUser = {
   totalFinesPaidRwf: number;
   totalFinesOwedRwf: number;
   selected?: boolean;
+  role: string;
+  gender: string;
 };
 
 export type SeedBook = {

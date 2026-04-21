@@ -18,6 +18,8 @@ function createEmptyFormData(): UserFormData {
     primaryPhone: '',
     primaryEmail: '',
     address: '',
+    role: 'Student',
+    gender: '',
   };
 }
 
@@ -61,6 +63,8 @@ export function UserDetails() {
           primaryPhone: user.primaryPhone,
           primaryEmail: user.primaryEmail,
           address: user.address,
+          role: user.role,
+          gender: user.gender,
         });
         setStudentId(user.studentId);
         setIsEditing(false);
@@ -106,6 +110,8 @@ export function UserDetails() {
         primaryPhone: updatedUser.primaryPhone,
         primaryEmail: updatedUser.primaryEmail,
         address: updatedUser.address,
+        role: updatedUser.role,
+        gender: updatedUser.gender,
       });
       setStudentId(updatedUser.studentId);
       setIsEditing(false);
@@ -159,6 +165,8 @@ export function UserDetails() {
               <InfoItem label="Last Name" value={formData.lastName} isEditing={isEditing} onChange={(val) => handleChange('lastName', val)} />
               <InfoItem label="Class" value={formData.classLevel} isEditing={isEditing} onChange={(val) => handleChange('classLevel', val)} placeholder="Two" />
               <InfoItem label="Section" value={formData.section} isEditing={isEditing} onChange={(val) => handleChange('section', val)} placeholder="Red" />
+              <InfoItem label="Role" value={formData.role} isEditing={isEditing} onChange={(val) => handleChange('role', val)} placeholder="Student" />
+              <InfoItem label="Gender" value={formData.gender} isEditing={isEditing} onChange={(val) => handleChange('gender', val)} placeholder="MAN/WOMAN" />
               <InfoItem label="Roll" value={formData.roll} isEditing={isEditing} onChange={(val) => handleChange('roll', val)} placeholder="5648" />
               <InfoItem label="Admission Date" value={formData.admissionDate} isEditing={isEditing} onChange={(val) => handleChange('admissionDate', val)} placeholder="09-01-2021" type="date" />
             </div>

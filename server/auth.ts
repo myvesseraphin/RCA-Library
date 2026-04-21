@@ -180,9 +180,15 @@ function buildPasswordResetEmailHtml(name: string, code: string) {
   const safeCode = escapeHtml(code);
   const safeMinutes = escapeHtml(String(config.resetCodeTtlMinutes));
   const supportEmail = escapeHtml(buildFromAddress().replace(/^.*<([^>]+)>.*$/, '$1') || config.smtpUser || config.resendFromEmail || '');
-  const brandImageUrl = getEmailBrandImageUrl();
+  const brandImageUrl = 'https://nhvsjmfcqelypjjvhwhd.supabase.co/storage/v1/object/public/images/logo.png';
 
-  const logoMarkup = '';
+  const logoMarkup = `
+    <tr>
+      <td align="center" style="padding-bottom:34px;">
+        <img src="${brandImageUrl}" alt="Library Logo" width="120" style="display:block;border:0;outline:none;text-decoration:none;" />
+      </td>
+    </tr>
+  `;
 
   return `<!doctype html>
 <html lang="en">
